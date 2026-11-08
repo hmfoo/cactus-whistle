@@ -399,7 +399,7 @@
       });
       const names=Object.keys(wasm).filter(name=>/cactus|malloc|free/i.test(name)).sort();
       logDebug('WASM_EXPORTS',names.map(name=>`${name}: type=${typeof wasm[name]}${typeof wasm[name]==='function'?`, args=${wasm[name].length}`:''}`).join('\n'),'ok');
-      const required=['_malloc','_free','_cactus_load','_cactus_models','_cactus_init','_cactus_transcribe'];
+      const required=['_malloc','_free','_cactus_load','_cactus_models','_cactus_transcribe'];
       const missing=required.filter(name=>typeof wasm[name] !== 'function');
       if (missing.length) throw new Error('This runtime build is missing expected C API exports: '+missing.join(', '));
       logDebug('CACTUS_ABI',{
@@ -421,41 +421,30 @@
       setStatus('Loading Whistle into the local WASM engine…');
       setStage('CACTUS_LOAD',`_cactus_load.length=${wasm._cactus_load.length}; modelBytes=${modelBytes.byteLength}`);
       retainedModelPtr=allocAndCopy(modelBytes);
-      logDebug('CACTUS_LOAD_CALL',`Calling _cactus_load(ptr=${retainedModelPtr}, size=BigInt(${modelBytes.byteLength})); keeping this buffer allocated until page closes`);
-      const loadCode=wasm._cactus_load(retainedModelPtr,BigInt(modelBytes.byteLength));
-      const loadError=getLastError();
-      logDebug('CACTUS_LOAD_RESULT',{returnValue:loadCode,lastError:loadError,bufferPointer:retainedModelPtr,bufferRetained:true},loadCode<0?'error':'ok');
-      // CACTUS_SPEECH is defined as 2 in the v4.0.0 cactus.h header.
-      const modelsAfterLoad=wasm._cactus_models();
-      logDebug('CACTUS_MODELS_AFTER_LOAD',{
-        rawMask:modelsAfterLoad,
-        binaryMask:Number(modelsAfterLoad).toString(2),
-        textLoaded:!!(modelsAfterLoad & 1),
-        speechLoaded:!!(modelsAfterLoad & 2),
-        visionLoaded:!!(modelsAfterLoad & 4),
-        expectedWhistleSpeechFlag:2,
-        loadReturnValue:loadCode,
-        lastError:loadError
-      },(modelsAfterLoad & 2)?'ok':'warn');
-      if (loadCode < 0) throw new Error(loadError || `cactus_load failed (${loadCode}).`);
-      setStage('CACTUS_INIT',`_cactus_init.length=${wasm._cactus_init.length}; modelMask=${modelsAfterLoad}`);
-      logDebug('CACTUS_INIT_CALL','Calling _cactus_init(NULL, NULL, NULL) per the v4.0.0 header');
-      const initCode=wasm._cactus_init(0,0,0);
-      const initError=getLastError();
-      const modelsAfterInit=wasm._cactus_models();
-      logDebug('CACTUS_INIT_RESULT',{returnValue:initCode,lastError:initError,modelsAfterInit,speechLoaded:!!(modelsAfterInit & 2)},initCode<0?'error':'ok');
-      if (initCode < 0) {
-        const detail=`cactus_init returned ${initCode}: ${initError || 'no error text'}; cactus_models()=${modelsAfterInit} (speech bit 2 expected). ` +
-          (modelsAfterLoad===0 ? 'The runtime did not register any model after cactus_load. The next diagnostic should focus on the archive bytes/loader.' : 'A model bit was present after load; investigate the init stage/runtime state.');
-        throw new Error(detail);
+      logDebug('CACTUS_LOAD_CALL',`Calling _cactus_load(ptr=${retainedModelPtr}, size=BigInt(${modelBytes.byteLength}))`);
+      let loadCode, loadError='';
+      try {
+        loadCode=wasm._cactus_load(retainedModelPtr,BigInt(modelBytes.byteLength));
+        loadError=getLastError();
+      } finally {
+        // The engine copies the archive during load, so the buffer can be released immediately.
+        try { wasm._free(retainedModelPtr); } catch (_) {}
+        retainedModelPtr=0;
       }
-      if (!(modelsAfterInit & 2)) throw new Error(`cactus_init returned ${initCode}, but cactus_models()=${modelsAfterInit}; Whistle speech flag 2 is missing.`);
+      logDebug('CACTUS_LOAD_RESULT',{returnValue:loadCode,lastError:loadError},loadCode<0?'error':'ok');
+      if (loadCode < 0) throw new Error(loadError || `cactus_load failed (${loadCode}).`);
+      // NEEDLE_TEXT=1, NEEDLE_SPEECH=2. Whistle is a speech model, so only bit 2 is expected.
+      // cactus_init configures the TEXT model only; it is intentionally NOT called for Whistle.
+      const modelsAfterLoad=wasm._cactus_models();
+      logDebug('CACTUS_MODELS_AFTER_LOAD',{rawMask:modelsAfterLoad,textLoaded:!!(modelsAfterLoad & 1),speechLoaded:!!(modelsAfterLoad & 2)},(modelsAfterLoad & 2)?'ok':'error');
+      if (!(modelsAfterLoad & 2)) throw new Error(`cactus_load succeeded but cactus_models()=${modelsAfterLoad}; the speech flag (2) is not set. ${getLastError()}`);
+      const modelsAfterInit=modelsAfterLoad;
       modelReady=true;
       els.modelDot.classList.add('ready'); els.modelStatus.textContent='Whistle ready · running locally';
       els.loadBtn.textContent='Model ready'; els.loadBtn.disabled=true;
       els.recordBtn.disabled=false; els.recordLabel.textContent='Start recording';
       els.loadMeterBar.style.width='100%';
-      setStage('MODEL_READY',`cactus_models()=${modelsAfterInit}; speech model flag 2 present; model archive buffer retained`);
+      setStage('MODEL_READY',`cactus_models()=${modelsAfterInit}; speech model flag 2 present`);
       setStatus('Ready. Record a note; audio is converted to 16 kHz mono and transcribed on this device.');
       notify('Whistle model is ready');
     } catch (error) {
@@ -562,7 +551,8 @@
     const pcmPtr=wasm._malloc(pcm.length*4);
     if (!pcmPtr) throw new Error('Could not allocate audio memory. Try a shorter recording.');
     const langPtr=allocString(language);
-    const keyPtr=allocString(JSON.stringify(keywords));
+    // Keywords are newline-separated words/phrases (not JSON); empty string/NULL means none.
+    const keyPtr=allocString(keywords.join('\n'));
     const outPtr=wasm._malloc(OUTPUT_CAPACITY);
     if (!outPtr) { wasm._free(pcmPtr); wasm._free(langPtr); wasm._free(keyPtr); throw new Error('Could not allocate output memory.'); }
     try {
@@ -583,8 +573,10 @@
     setBusy(true); els.recordBtn.disabled=true;
     setStatus('Converting recording to 16 kHz mono audio…');
     try {
-      const pcm=await blobTo16kMono(blob);
+      let pcm=await blobTo16kMono(blob);
       if (!pcm.length) throw new Error('The recording contained no usable audio.');
+      // The engine rejects clips longer than 30 s (480,000 samples).
+      if (pcm.length>SAMPLE_RATE*MAX_SECONDS) pcm=pcm.subarray(0,SAMPLE_RATE*MAX_SECONDS);
       const language=els.language.value;
       const keywords=els.keywords.value.split(',').map(s=>s.trim()).filter(Boolean).slice(0,100);
       setStatus('Whistle is transcribing on this phone. This can take a moment…');
