@@ -144,7 +144,7 @@
 <script>
 (() => {
   'use strict';
-  const ENGINE_BASE = 'https://huggingface.co/Cactus-Compute/cactus/resolve/main/releases/4.0.0/wasm/';
+  const ENGINE_BASE = 'https://huggingface.co/Cactus-Compute/cactus/resolve/main/releases/4.1.0/wasm/';
   const ENGINE_JS = ENGINE_BASE + 'cactus.js';
   const MODEL_URL = 'https://huggingface.co/Cactus-Compute/whistle/resolve/main/whistle.cact';
   const CACHE_NAME = 'cactus-whistle-assets-v4';
@@ -569,6 +569,27 @@
       wasm._free(pcmPtr); wasm._free(langPtr); wasm._free(keyPtr); wasm._free(outPtr);
     }
   }
+  function trimSilence(pcm) {
+    const frame=Math.round(SAMPLE_RATE*0.02); // 20 ms frames
+    const n=Math.floor(pcm.length/frame);
+    if (n<10) return pcm;
+    const rms=new Float32Array(n); let peak=0;
+    for (let i=0;i<n;i++) {
+      let sum=0; const base=i*frame;
+      for (let j=0;j<frame;j++) { const v=pcm[base+j]; sum+=v*v; }
+      rms[i]=Math.sqrt(sum/frame); if (rms[i]>peak) peak=rms[i];
+    }
+    const threshold=Math.max(0.01,peak*0.08);
+    let first=-1,last=-1;
+    for (let i=0;i<n;i++) if (rms[i]>=threshold) { if (first<0) first=i; last=i; }
+    if (first<0) { logDebug('TRIM_SILENCE','No frame above threshold; keeping full clip','warn'); return pcm; }
+    const pad=Math.round(SAMPLE_RATE*0.35); // keep 350 ms of context so word edges aren't clipped
+    const start=Math.max(0,first*frame-pad);
+    const end=Math.min(pcm.length,(last+1)*frame+pad);
+    const saved=(pcm.length-(end-start))/SAMPLE_RATE;
+    logDebug('TRIM_SILENCE',{threshold:+threshold.toFixed(4),originalSeconds:+(pcm.length/SAMPLE_RATE).toFixed(2),trimmedSeconds:+((end-start)/SAMPLE_RATE).toFixed(2),savedSeconds:+saved.toFixed(2)},'ok');
+    return saved>=0.5 ? pcm.slice(start,end) : pcm;
+  }
   async function transcribeBlob(blob) {
     setBusy(true); els.recordBtn.disabled=true;
     setStatus('Converting recording to 16 kHz mono audio…');
@@ -577,9 +598,13 @@
       if (!pcm.length) throw new Error('The recording contained no usable audio.');
       // The engine rejects clips longer than 30 s (480,000 samples).
       if (pcm.length>SAMPLE_RATE*MAX_SECONDS) pcm=pcm.subarray(0,SAMPLE_RATE*MAX_SECONDS);
+      // Processing time scales with clip length (~2.3x realtime in WASM), so drop leading/trailing silence.
+      pcm=trimSilence(pcm);
       const language=els.language.value;
       const keywords=els.keywords.value.split(',').map(s=>s.trim()).filter(Boolean).slice(0,100);
-      setStatus('Whistle is transcribing on this phone. This can take a moment…');
+      setStatus(`Whistle is transcribing ${(pcm.length/SAMPLE_RATE).toFixed(1)}s of audio on this device. Expect roughly ${Math.max(3,Math.round(pcm.length/SAMPLE_RATE*2.3))}s; the page may pause while it works…`);
+      // The engine call below blocks the main thread; let the browser paint the status first.
+      await new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,50)));
       // Cactus Whistle is designed for clips up to 30 seconds in one pass.
       const result=runTranscription(pcm,language,keywords);
       if (!result.text.trim()) throw new Error('No speech was detected. Try speaking closer to the microphone or recording in a quieter place.');
