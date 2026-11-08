@@ -163,6 +163,9 @@
   };
 
   let wasm = null;
+  // Keep the .cact archive buffer alive for the lifetime of the WASM model.
+  // Some engine builds may retain views into the supplied archive bytes.
+  let retainedModelPtr = 0;
   let modelReady = false;
   let busy = false;
   let recorder = null;
@@ -372,8 +375,13 @@
   async function loadModel() {
     if (modelReady || busy) return;
     setBusy(true); els.loadBtn.textContent='Loading…'; els.loadMeter.style.display='block'; els.loadMeterBar.style.width='3%';
-    let modelPtr=0;
     try {
+      // Tear down any failed prior attempt before constructing a fresh WASM instance.
+      if (retainedModelPtr && wasm) {
+        try { wasm._free(retainedModelPtr); logDebug('MODEL_BUFFER_RELEASE','Released model buffer from previous failed attempt'); }
+        catch (e) { logDebug('MODEL_BUFFER_RELEASE_FAIL',e,'warn'); }
+        retainedModelPtr=0;
+      }
       setStage('LOAD_MODEL_START',`secureContext=${window.isSecureContext}; userAgent=${navigator.userAgent}`);
       setStatus('Loading the Cactus JavaScript engine…');
       await loadEngineScript();
@@ -391,9 +399,16 @@
       });
       const names=Object.keys(wasm).filter(name=>/cactus|malloc|free/i.test(name)).sort();
       logDebug('WASM_EXPORTS',names.map(name=>`${name}: type=${typeof wasm[name]}${typeof wasm[name]==='function'?`, args=${wasm[name].length}`:''}`).join('\n'),'ok');
-      const required=['_malloc','_free','_cactus_load','_cactus_init','_cactus_transcribe'];
+      const required=['_malloc','_free','_cactus_load','_cactus_models','_cactus_init','_cactus_transcribe'];
       const missing=required.filter(name=>typeof wasm[name] !== 'function');
-      if (missing.length) throw new Error('This runtime build is missing expected C API exports: '+missing.join(', ')+'. See Diagnostics for available exports.');
+      if (missing.length) throw new Error('This runtime build is missing expected C API exports: '+missing.join(', '));
+      logDebug('CACTUS_ABI',{
+        cactus_load: `${wasm._cactus_load.length} args: (const unsigned char* cact, unsigned long long n)`,
+        cactus_models: `${wasm._cactus_models.length} args: () -> model-family bitmask`,
+        cactus_init: `${wasm._cactus_init.length} args: (system_prompt, tools_json, tool_index_path)`,
+        cactus_transcribe: `${wasm._cactus_transcribe.length} args: (float* pcm, int samples, language, keywords, word_timestamps, out, out_capacity)`,
+        expectedSpeechFlag: 2
+      },'ok');
       els.loadMeterBar.style.width='25%';
       setStage('MODEL_DOWNLOAD');
       setStatus('Downloading Whistle weights (about 16.9 MB) on first use…');
@@ -401,30 +416,50 @@
       if (!modelBytes.length) throw new Error('The Whistle model download was empty.');
       const magic=Array.from(modelBytes.slice(0,8)).map(x=>x.toString(16).padStart(2,'0')).join(' ');
       const magicValue=modelBytes.length>=4?new DataView(modelBytes.buffer,modelBytes.byteOffset,4).getUint32(0,true).toString(16):'n/a';
-      logDebug('MODEL_CHECK',{bytes:modelBytes.byteLength,first8Hex:magic,first4LittleEndian:'0x'+magicValue,looksLikeHtml: new TextDecoder().decode(modelBytes.slice(0,64)).trimStart().toLowerCase().startsWith('<!doctype') || new TextDecoder().decode(modelBytes.slice(0,64)).trimStart().toLowerCase().startsWith('<html')},'ok');
-      els.loadMeterBar.style.width='82%'; setStatus('Loading Whistle into the local WASM engine…');
+      logDebug('MODEL_CHECK',{bytes:modelBytes.byteLength,first8Hex:magic,first4LittleEndian:'0x'+magicValue,looksLikeHtml:new TextDecoder().decode(modelBytes.slice(0,64)).trimStart().toLowerCase().startsWith('<!doctype') || new TextDecoder().decode(modelBytes.slice(0,64)).trimStart().toLowerCase().startsWith('<html')},'ok');
+      els.loadMeterBar.style.width='82%';
+      setStatus('Loading Whistle into the local WASM engine…');
       setStage('CACTUS_LOAD',`_cactus_load.length=${wasm._cactus_load.length}; modelBytes=${modelBytes.byteLength}`);
-      modelPtr=allocAndCopy(modelBytes);
-      logDebug('CACTUS_LOAD_CALL',`Calling _cactus_load(ptr=${modelPtr}, size=BigInt(${modelBytes.byteLength}))`);
-      let loadCode;
-      try { loadCode=wasm._cactus_load(modelPtr,BigInt(modelBytes.byteLength)); }
-      finally { wasm._free(modelPtr); modelPtr=0; }
-      logDebug('CACTUS_LOAD_RESULT',{returnValue:loadCode,lastError:getLastError()},loadCode<0?'error':'ok');
-      if (loadCode < 0) throw new Error(getLastError() || `cactus_load failed (${loadCode}).`);
-      setStage('CACTUS_INIT',`_cactus_init.length=${wasm._cactus_init.length}`);
-      logDebug('CACTUS_INIT_CALL','Calling _cactus_init(0, 0, 0)');
+      retainedModelPtr=allocAndCopy(modelBytes);
+      logDebug('CACTUS_LOAD_CALL',`Calling _cactus_load(ptr=${retainedModelPtr}, size=BigInt(${modelBytes.byteLength})); keeping this buffer allocated until page closes`);
+      const loadCode=wasm._cactus_load(retainedModelPtr,BigInt(modelBytes.byteLength));
+      const loadError=getLastError();
+      logDebug('CACTUS_LOAD_RESULT',{returnValue:loadCode,lastError:loadError,bufferPointer:retainedModelPtr,bufferRetained:true},loadCode<0?'error':'ok');
+      // CACTUS_SPEECH is defined as 2 in the v4.0.0 cactus.h header.
+      const modelsAfterLoad=wasm._cactus_models();
+      logDebug('CACTUS_MODELS_AFTER_LOAD',{
+        rawMask:modelsAfterLoad,
+        binaryMask:Number(modelsAfterLoad).toString(2),
+        textLoaded:!!(modelsAfterLoad & 1),
+        speechLoaded:!!(modelsAfterLoad & 2),
+        visionLoaded:!!(modelsAfterLoad & 4),
+        expectedWhistleSpeechFlag:2,
+        loadReturnValue:loadCode,
+        lastError:loadError
+      },(modelsAfterLoad & 2)?'ok':'warn');
+      if (loadCode < 0) throw new Error(loadError || `cactus_load failed (${loadCode}).`);
+      setStage('CACTUS_INIT',`_cactus_init.length=${wasm._cactus_init.length}; modelMask=${modelsAfterLoad}`);
+      logDebug('CACTUS_INIT_CALL','Calling _cactus_init(NULL, NULL, NULL) per the v4.0.0 header');
       const initCode=wasm._cactus_init(0,0,0);
-      logDebug('CACTUS_INIT_RESULT',{returnValue:initCode,lastError:getLastError()},initCode<0?'error':'ok');
-      if (initCode < 0) throw new Error(getLastError() || `cactus_init failed (${initCode}).`);
+      const initError=getLastError();
+      const modelsAfterInit=wasm._cactus_models();
+      logDebug('CACTUS_INIT_RESULT',{returnValue:initCode,lastError:initError,modelsAfterInit,speechLoaded:!!(modelsAfterInit & 2)},initCode<0?'error':'ok');
+      if (initCode < 0) {
+        const detail=`cactus_init returned ${initCode}: ${initError || 'no error text'}; cactus_models()=${modelsAfterInit} (speech bit 2 expected). ` +
+          (modelsAfterLoad===0 ? 'The runtime did not register any model after cactus_load. The next diagnostic should focus on the archive bytes/loader.' : 'A model bit was present after load; investigate the init stage/runtime state.');
+        throw new Error(detail);
+      }
+      if (!(modelsAfterInit & 2)) throw new Error(`cactus_init returned ${initCode}, but cactus_models()=${modelsAfterInit}; Whistle speech flag 2 is missing.`);
       modelReady=true;
       els.modelDot.classList.add('ready'); els.modelStatus.textContent='Whistle ready · running locally';
       els.loadBtn.textContent='Model ready'; els.loadBtn.disabled=true;
       els.recordBtn.disabled=false; els.recordLabel.textContent='Start recording';
-      els.loadMeterBar.style.width='100%'; setStage('MODEL_READY','Cactus load and init returned without a negative error code');
+      els.loadMeterBar.style.width='100%';
+      setStage('MODEL_READY',`cactus_models()=${modelsAfterInit}; speech model flag 2 present; model archive buffer retained`);
       setStatus('Ready. Record a note; audio is converted to 16 kHz mono and transcribed on this device.');
       notify('Whistle model is ready');
     } catch (error) {
-      if (modelPtr && wasm) { try { wasm._free(modelPtr); } catch (_) {} }
+      if (retainedModelPtr && wasm) { try { wasm._free(retainedModelPtr); } catch (_) {} retainedModelPtr=0; }
       console.error(error);
       logDebug('LOAD_EXCEPTION',{stage:debugStage,error},'error');
       const msg=error && error.message ? error.message : String(error);
@@ -518,7 +553,7 @@
     try {
       const parsed=JSON.parse(value);
       if (typeof parsed==='string') return {text:parsed,language:''};
-      return {text:parsed.text || parsed.transcript || parsed.audio_text || '',language:parsed.language || parsed.audio_language || '',meta:parsed};
+      return {text:parsed.text || parsed.transcript || parsed.audio_text || parsed.response || '',language:parsed.language || parsed.audio_language || '',meta:parsed};
     } catch (_) { return {text:value,language:''}; }
   }
   function runTranscription(pcm, language, keywords) {
@@ -534,8 +569,8 @@
       wasm.HEAPU8.set(new Uint8Array(pcm.buffer,pcm.byteOffset,pcm.byteLength),pcmPtr);
       wasm.HEAPU8.fill(0,outPtr,outPtr+OUTPUT_CAPACITY);
       // Cactus v4 speech calls take the model handle first; NULL selects the globally loaded model.
-      logDebug('TRANSCRIBE_CALL','Calling _cactus_transcribe with 8 arguments: (0, pcmPtr, sampleCount, languagePtr, keywordsPtr, 0, outputPtr, outputCapacity). Check the exported WASM arity below.');
-      const code=wasm._cactus_transcribe(0,pcmPtr,pcm.length,langPtr,keyPtr,0,outPtr,OUTPUT_CAPACITY);
+      logDebug('TRANSCRIBE_CALL','Calling v4.0.0 _cactus_transcribe with 7 arguments: (pcmPtr, sampleCount, languagePtr, keywordsPtr, wordTimestamps=0, outputPtr, outputCapacity).');
+      const code=wasm._cactus_transcribe(pcmPtr,pcm.length,langPtr,keyPtr,0,outPtr,OUTPUT_CAPACITY);
       const raw=decodeWasmString(outPtr);
       logDebug('TRANSCRIBE_RESULT',{returnCode:code,lastError:getLastError(),rawResponse:raw.slice(0,1200)},code<0?'error':'ok');
       if (code < 0) throw new Error(getLastError() || `cactus_transcribe failed (${code}).`);
