@@ -1,0 +1,627 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f5f7f4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#101512" media="(prefers-color-scheme: dark)">
+<meta name="description" content="Private, on-device voice transcription powered by Cactus Whistle.">
+<title>Whistle</title>
+<style>
+  :root{color-scheme:light dark;--bg:#f5f7f4;--card:#fff;--line:#e2e8e2;--text:#18211b;--muted:#6a766d;--accent:#2e7d4b;--accent-ink:#fff;--rec:#d6453a;--soft:#eaf1eb;--danger:#c0392b;--shadow:0 1px 2px rgba(20,40,25,.06),0 6px 20px rgba(20,40,25,.06)}
+  @media(prefers-color-scheme:dark){:root{--bg:#101512;--card:#171e19;--line:#27322a;--text:#e8f0ea;--muted:#8d9c91;--accent:#7bd08f;--accent-ink:#0d1a11;--rec:#ee6a5f;--soft:#1e2a21;--danger:#ff8f84;--shadow:none}}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  [hidden]{display:none!important}
+  body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;min-height:100dvh;padding:calc(14px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom))}
+  .app{max-width:520px;margin:0 auto}
+  header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:18px}
+  .brand{display:flex;align-items:center;gap:8px}
+  .logo{font-size:22px;line-height:1}
+  h1{margin:0;font-size:19px;font-weight:700;letter-spacing:-.3px}
+  .chip{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);background:var(--card);border:1px solid var(--line);border-radius:99px;padding:5px 11px}
+  .dot{width:7px;height:7px;border-radius:50%;background:#d3a443;flex:none}
+  .dot.ready{background:var(--accent)}
+  .dot.fail{background:var(--danger)}
+  button,select,input,textarea{font:inherit;color:inherit}
+  button{border:0;cursor:pointer;touch-action:manipulation}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .recorder{display:flex;flex-direction:column;align-items:center;gap:10px;margin-bottom:16px}
+  .rec{width:100%;min-height:64px;border-radius:20px;background:var(--accent);color:var(--accent-ink);font-size:17px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:var(--shadow);transition:transform .08s}
+  .rec:active:not(:disabled){transform:scale(.985)}
+  .rec.recording{background:var(--rec);color:#fff}
+  .rec svg{width:22px;height:22px;flex:none}
+  .rec .ic-stop{display:none}
+  .rec.recording .ic-mic{display:none}
+  .rec.recording .ic-stop{display:block}
+  .meter{width:100%;height:3px;background:var(--line);border-radius:99px;overflow:hidden;display:none}
+  .meter>span{display:block;height:100%;width:0;background:var(--accent);transition:width .15s}
+  .timer{font-variant-numeric:tabular-nums;font-size:14px;color:var(--rec);min-height:0;font-weight:600}
+  .timer:empty{display:none}
+  .status{font-size:13px;color:var(--muted);text-align:center;min-height:0}
+  .status:empty{display:none}
+  .status.error{color:var(--danger)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:12px;box-shadow:var(--shadow)}
+  .opts{display:flex;gap:8px;margin-bottom:10px}
+  select,input{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:0 11px;height:42px;min-width:0;outline:none;font-size:14px}
+  select{flex:0 0 38%}
+  input{flex:1}
+  textarea{width:100%;min-height:120px;resize:vertical;background:transparent;border:0;outline:none;padding:4px 2px;font-size:16px;line-height:1.5}
+  select:focus,input:focus{border-color:var(--accent)}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid var(--line);padding-top:10px;margin-top:6px}
+  .meta{font-size:12px;color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .btn{border-radius:11px;padding:0 16px;height:38px;font-size:14px;font-weight:650;background:var(--accent);color:var(--accent-ink)}
+  .btn.soft{background:var(--soft);color:var(--text)}
+  .link{background:none;color:var(--muted);font-size:12px;padding:8px 6px}
+  .link.danger{color:var(--danger)}
+  .history{margin-top:22px}
+  .history-head{display:flex;align-items:center;justify-content:space-between;margin:0 4px 6px;font-size:13px;color:var(--muted);font-weight:600}
+  .history-list{display:flex;flex-direction:column;gap:8px}
+  .item{display:flex;align-items:flex-start;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 10px 10px 13px}
+  .item-main{flex:1;min-width:0;cursor:pointer}
+  .item-date{font-size:11px;color:var(--muted);margin-bottom:2px}
+  .item-text{font-size:14px;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .item .btn{height:32px;padding:0 12px;font-size:12px;flex:none}
+  footer{margin-top:26px;text-align:center}
+  .diag{margin-top:6px;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px}
+  .diag-actions{display:flex;gap:6px;margin-bottom:8px}
+  .diag-actions .btn{height:32px;font-size:12px;padding:0 12px}
+  .debug-log{max-height:240px;overflow:auto;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px;font:11px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text}
+  .debug-log .error{color:var(--danger)}
+  .debug-log .warn{color:#b7861f}
+  .debug-log .ok{color:var(--accent)}
+  .toast{position:fixed;left:50%;bottom:calc(22px + env(safe-area-inset-bottom));transform:translate(-50%,16px);opacity:0;pointer-events:none;background:var(--text);color:var(--bg);border-radius:12px;padding:9px 14px;font-size:13px;font-weight:600;transition:.2s;z-index:20;max-width:calc(100vw - 32px);text-align:center}
+  .toast.show{transform:translate(-50%,0);opacity:1}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand"><span class="logo" aria-hidden="true">🌵</span><h1>Whistle</h1></div>
+    <div class="chip"><span class="dot" id="modelDot"></span><span id="modelStatus">Not set up</span></div>
+  </header>
+
+  <main>
+    <section class="recorder">
+      <button class="rec" id="recordBtn" disabled>
+        <svg class="ic-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+        <svg class="ic-stop" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2.5"/></svg>
+        <span id="recordLabel">Checking…</span>
+      </button>
+      <div class="meter" id="loadMeter"><span id="loadMeterBar"></span></div>
+      <div class="timer" id="timer"></div>
+      <div class="status" id="status" role="status" aria-live="polite"></div>
+    </section>
+
+    <section class="card">
+      <div class="opts">
+        <select id="language" aria-label="Language"><option value="">Auto language</option><option value="en">English</option><option value="de">German</option><option value="fr">French</option><option value="es">Spanish</option><option value="it">Italian</option><option value="nl">Dutch</option><option value="pl">Polish</option></select>
+        <input id="keywords" type="text" placeholder="Name hints, comma-separated" aria-label="Name or word hints" autocomplete="off">
+      </div>
+      <textarea id="transcript" placeholder="Transcript" spellcheck="true"></textarea>
+      <div class="row"><span class="meta" id="transcriptMeta"></span><button class="btn" id="copyBtn" disabled>Copy</button></div>
+    </section>
+
+    <section class="history" id="historySection" hidden>
+      <div class="history-head"><span>History <span id="historyCount"></span></span><button class="link danger" id="clearHistoryBtn">Clear</button></div>
+      <div class="history-list" id="historyList"></div>
+    </section>
+  </main>
+
+  <footer>
+    <button class="link" id="diagToggle" aria-expanded="false" aria-controls="debugPanel">Diagnostics</button>
+    <div class="diag" id="debugPanel" hidden>
+      <div class="diag-actions">
+        <button class="btn soft" id="copyDebugBtn">Copy log</button>
+        <button class="btn soft" id="clearDebugBtn">Clear</button>
+      </div>
+      <div class="debug-log" id="debugLog" aria-live="polite">No events yet.</div>
+    </div>
+  </footer>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  'use strict';
+  const ENGINE_BASE = 'https://huggingface.co/Cactus-Compute/cactus/resolve/main/releases/4.0.0/wasm/';
+  const ENGINE_JS = ENGINE_BASE + 'cactus.js';
+  const MODEL_URL = 'https://huggingface.co/Cactus-Compute/whistle/resolve/main/whistle.cact';
+  const CACHE_NAME = 'cactus-whistle-assets-v4';
+  const HISTORY_KEY = 'cactus-whistle-history-v1';
+  const SAMPLE_RATE = 16000;
+  const MAX_SECONDS = 30;
+  const OUTPUT_CAPACITY = 256 * 1024;
+
+  const $ = id => document.getElementById(id);
+  const els = {
+    modelDot:$('modelDot'), modelStatus:$('modelStatus'), loadMeter:$('loadMeter'), loadMeterBar:$('loadMeterBar'),
+    recordBtn:$('recordBtn'), recordLabel:$('recordLabel'), timer:$('timer'), status:$('status'),
+    language:$('language'), keywords:$('keywords'), transcript:$('transcript'), transcriptMeta:$('transcriptMeta'), copyBtn:$('copyBtn'),
+    historySection:$('historySection'), historyList:$('historyList'), historyCount:$('historyCount'), clearHistoryBtn:$('clearHistoryBtn'), toast:$('toast'),
+    diagToggle:$('diagToggle'), debugPanel:$('debugPanel'), debugLog:$('debugLog'), copyDebugBtn:$('copyDebugBtn'), clearDebugBtn:$('clearDebugBtn')
+  };
+
+  let wasm = null;
+  let modelReady = false;
+  let loadFailed = false;
+  let busy = true;               // true until the startup cache check finishes
+  let busyLabel = 'Checking…';
+  let recorder = null;
+  let micStream = null;
+  let recordedParts = [];
+  let recordingStarted = 0;
+  let timerHandle = null;
+  let historyItems = loadHistory();
+  let toastHandle = null;
+  let debugStage = 'PAGE_START';
+  const debugLines = [];
+
+  // ---------- diagnostics (always collected, shown only when toggled on) ----------
+  function debugValue(value) {
+    if (value instanceof Error) return `${value.name}: ${value.message}${value.stack ? "\n" + value.stack : ''}`;
+    if (typeof value === 'string') return value;
+    try { return JSON.stringify(value, (_, v) => typeof v === 'bigint' ? `${v}n` : v); }
+    catch (_) { return String(value); }
+  }
+  function renderDebug() {
+    if (els.debugPanel.hidden) return;
+    els.debugLog.replaceChildren();
+    debugLines.forEach(item => {
+      const div=document.createElement('div'); div.className=item.level; div.textContent=item.line; els.debugLog.appendChild(div);
+    });
+    els.debugLog.scrollTop=els.debugLog.scrollHeight;
+  }
+  function logDebug(label, detail='', level='info') {
+    const line = `[${new Date().toLocaleTimeString()}] [${label}] ${debugValue(detail)}`;
+    debugLines.push({line,level});
+    if (debugLines.length > 150) debugLines.shift();
+    renderDebug();
+    console[level==='error'?'error':level==='warn'?'warn':'log']('[Whistle]', line);
+  }
+  function setStage(stage, detail='') {
+    debugStage=stage;
+    logDebug('STAGE', detail ? `${stage}: ${detail}` : stage, 'ok');
+  }
+  async function copyDebugLog() {
+    const text=debugLines.map(item=>item.line).join('\n') || 'No diagnostic events.';
+    try {
+      if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(text);
+      else throw new Error('Clipboard API unavailable');
+      notify('Log copied');
+    } catch (error) {
+      const box=document.createElement('textarea'); box.value=text; box.style.cssText='position:fixed;opacity:0';
+      document.body.appendChild(box); box.select();
+      const copied=document.execCommand('copy'); box.remove();
+      notify(copied ? 'Log copied' : 'Could not copy log');
+    }
+  }
+
+  // ---------- UI helpers ----------
+  function setStatus(message, isError=false) {
+    els.status.textContent = message;
+    els.status.classList.toggle('error', isError);
+    if (isError) logDebug('STATUS_ERROR', message, 'error');
+  }
+  function notify(message) {
+    els.toast.textContent = message;
+    els.toast.classList.add('show');
+    clearTimeout(toastHandle);
+    toastHandle = setTimeout(() => els.toast.classList.remove('show'), 1800);
+  }
+  function setChip(text, state) {
+    els.modelStatus.textContent=text;
+    els.modelDot.className='dot'+(state?' '+state:'');
+  }
+  function renderMain() {
+    const rec = !!(recorder && recorder.state==='recording');
+    let label, disabled=false;
+    if (rec) label='Stop';
+    else if (busy) { label=busyLabel; disabled=true; }
+    else if (!modelReady) label = loadFailed ? 'Retry setup' : 'Set up · 17 MB download';
+    else label='Tap to record';
+    els.recordBtn.classList.toggle('recording', rec);
+    els.recordLabel.textContent=label;
+    els.recordBtn.disabled=disabled;
+    els.language.disabled=busy||rec;
+    els.keywords.disabled=busy||rec;
+  }
+  function setBusy(value, label) {
+    busy=value; if (label) busyLabel=label; renderMain();
+  }
+  function formatDuration(seconds) {
+    const n=Math.max(0,Math.floor(seconds)); return `${String(Math.floor(n/60)).padStart(2,'0')}:${String(n%60).padStart(2,'0')}`;
+  }
+
+  // ---------- history ----------
+  function loadHistory() {
+    try { const value = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); return Array.isArray(value) ? value : []; }
+    catch (_) { return []; }
+  }
+  function persistHistory() {
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(historyItems.slice(0,50))); }
+    catch (_) { notify('Storage full: copy the text to keep it'); }
+  }
+  function renderHistory() {
+    els.historySection.hidden = historyItems.length === 0;
+    els.historyCount.textContent = historyItems.length ? `(${historyItems.length})` : '';
+    els.historyList.replaceChildren();
+    historyItems.forEach(item => {
+      const card=document.createElement('article'); card.className='item';
+      const main=document.createElement('div'); main.className='item-main'; main.title='Open in editor';
+      const date=document.createElement('div'); date.className='item-date';
+      date.textContent=new Date(item.createdAt).toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) + (item.language ? ' · '+item.language : '');
+      const text=document.createElement('div'); text.className='item-text'; text.textContent=item.text;
+      main.append(date,text); main.addEventListener('click',()=>loadHistoryItem(item));
+      const copy=document.createElement('button'); copy.className='btn soft'; copy.textContent='Copy'; copy.addEventListener('click',()=>copyText(item.text));
+      card.append(main,copy); els.historyList.appendChild(card);
+    });
+  }
+  function loadHistoryItem(item) {
+    els.transcript.value=item.text;
+    els.copyBtn.disabled=!item.text;
+    els.transcriptMeta.textContent=new Date(item.createdAt).toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+    els.transcript.scrollIntoView({behavior:'smooth',block:'center'});
+  }
+  async function copyText(value) {
+    if (!value) return;
+    try {
+      if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(value);
+      else {
+        els.transcript.value=value; els.transcript.focus(); els.transcript.select();
+        const ok=document.execCommand('copy'); window.getSelection()?.removeAllRanges();
+        if (!ok) throw new Error('Clipboard unavailable');
+      }
+      notify('Copied');
+    } catch (error) { notify('Copy blocked: select the text and copy it'); }
+  }
+
+  // ---------- WASM helpers ----------
+  function decodeWasmString(ptr) {
+    if (!ptr || !wasm) return '';
+    const heap=wasm.HEAPU8; let end=ptr;
+    while (end < heap.length && heap[end] !== 0 && end-ptr < 8192) end++;
+    return new TextDecoder().decode(heap.subarray(ptr,end));
+  }
+  function allocAndCopy(bytes) {
+    const ptr=wasm._malloc(bytes.byteLength || 1);
+    if (!ptr) throw new Error('Could not allocate memory in the Cactus WASM runtime.');
+    wasm.HEAPU8.set(bytes,ptr);
+    return ptr;
+  }
+  function allocString(value) {
+    return allocAndCopy(new TextEncoder().encode(String(value) + '\0'));
+  }
+  function getLastError() {
+    try { return decodeWasmString(wasm._cactus_last_error()); } catch (_) { return ''; }
+  }
+
+  // ---------- downloading / caching ----------
+  async function fetchCachedBytes(url, label) {
+    setStage('FETCH', `${label} · ${url}`);
+    let cache=null;
+    try { if ('caches' in window && window.isSecureContext) cache=await caches.open(CACHE_NAME); } catch (_) {}
+    if (cache) {
+      try {
+        const cached=await cache.match(url);
+        if (cached) {
+          const bytes=new Uint8Array(await cached.arrayBuffer());
+          logDebug('CACHE_HIT', `${label}: ${bytes.byteLength} bytes`,'ok');
+          return bytes;
+        }
+      } catch (_) {}
+    }
+    logDebug('FETCH_START', `${label}: ${url}`);
+    const response=await fetch(url,{mode:'cors',cache:'no-store'});
+    logDebug('FETCH_RESPONSE', {label,status:response.status,ok:response.ok,redirected:response.redirected,contentType:response.headers.get('content-type'),contentLength:response.headers.get('content-length')}, response.ok?'ok':'error');
+    if (!response.ok) throw new Error(`Download failed (${response.status}) for ${label}`);
+    const total=Number(response.headers.get('content-length')) || 0;
+    let bytes;
+    if (response.body && response.body.getReader) {
+      const reader=response.body.getReader(); const chunks=[]; let received=0;
+      while (true) {
+        const part=await reader.read(); if (part.done) break;
+        chunks.push(part.value); received+=part.value.length;
+        if (total) {
+          const pct=Math.min(100,Math.round(received/total*100));
+          els.loadMeter.style.display='block'; els.loadMeterBar.style.width=pct+'%';
+          setStatus(`Downloading ${label}… ${pct}%`);
+        } else setStatus(`Downloading ${label}… ${(received/1048576).toFixed(1)} MB`);
+      }
+      bytes=new Uint8Array(received); let offset=0;
+      for (const chunk of chunks) { bytes.set(chunk,offset); offset+=chunk.length; }
+    } else bytes=new Uint8Array(await response.arrayBuffer());
+    const header=Array.from(bytes.slice(0,16)).map(x=>x.toString(16).padStart(2,'0')).join(' ');
+    logDebug('ASSET_BYTES', `${label}: ${bytes.byteLength} bytes; first 16 bytes: ${header}`, 'ok');
+    if (cache) {
+      try { await cache.put(url,new Response(bytes,{headers:{'Content-Type':response.headers.get('content-type') || 'application/octet-stream'}})); logDebug('CACHE_WRITE',`${label} cached`,'ok'); }
+      catch (e) { logDebug('CACHE_WRITE_FAIL',e,'warn'); }
+    } else logDebug('CACHE_DISABLED','Cache API not available or page is not secure','warn');
+    return bytes;
+  }
+  async function loadEngineScript() {
+    setStage('ENGINE_SCRIPT');
+    if (typeof window.createCactus === 'function') { logDebug('ENGINE_SCRIPT','createCactus already exists','ok'); return; }
+    const existing=document.querySelector('script[data-cactus-engine]');
+    if (existing) {
+      await new Promise((resolve,reject)=>{ existing.addEventListener('load',resolve,{once:true}); existing.addEventListener('error',()=>reject(new Error('Could not load cactus.js.')),{once:true}); });
+      return;
+    }
+    const scriptBytes=await fetchCachedBytes(ENGINE_JS,'engine');
+    const scriptUrl=URL.createObjectURL(new Blob([scriptBytes],{type:'text/javascript'}));
+    await new Promise((resolve,reject)=>{
+      const script=document.createElement('script'); script.src=scriptUrl; script.async=true; script.dataset.cactusEngine='1';
+      script.onload=()=>{ URL.revokeObjectURL(scriptUrl); logDebug('ENGINE_SCRIPT_LOADED',`createCactus type=${typeof window.createCactus}`,'ok'); resolve(); };
+      script.onerror=(event)=>{ URL.revokeObjectURL(scriptUrl); script.remove(); logDebug('ENGINE_SCRIPT_ERROR',event,'error'); reject(new Error('Could not run the Cactus engine script.')); };
+      document.head.appendChild(script);
+    });
+  }
+
+  // ---------- model load ----------
+  async function loadModel() {
+    if (modelReady || (busy && busyLabel!=='Checking…')) return;
+    loadFailed=false;
+    setBusy(true,'Setting up…'); setChip('Loading','');
+    els.loadMeter.style.display='block'; els.loadMeterBar.style.width='3%';
+    let modelPtr=0;
+    try {
+      setStage('LOAD_MODEL_START',`secureContext=${window.isSecureContext}; userAgent=${navigator.userAgent}`);
+      setStatus('Loading engine…');
+      await loadEngineScript();
+      if (typeof window.createCactus !== 'function') throw new Error('The Cactus runtime script loaded, but createCactus was not found.');
+      setStage('WASM_DOWNLOAD');
+      const wasmBytes=await fetchCachedBytes(ENGINE_BASE+'cactus.wasm','runtime');
+      setStage('WASM_INSTANTIATE',`${wasmBytes.byteLength} bytes`);
+      wasm=await window.createCactus({
+        wasmBinary:wasmBytes.buffer.slice(wasmBytes.byteOffset,wasmBytes.byteOffset+wasmBytes.byteLength),
+        locateFile:(path)=> ENGINE_BASE+path,
+        print:(line)=>{ logDebug('WASM_STDOUT',line); },
+        printErr:(line)=>{ logDebug('WASM_STDERR',line,'warn'); }
+      });
+      const names=Object.keys(wasm).filter(name=>/cactus|malloc|free/i.test(name)).sort();
+      logDebug('WASM_EXPORTS',names.map(name=>`${name}: ${typeof wasm[name]}${typeof wasm[name]==='function'?`, args=${wasm[name].length}`:''}`).join('\n'),'ok');
+      const missing=['_malloc','_free','_cactus_load','_cactus_models','_cactus_transcribe'].filter(name=>typeof wasm[name] !== 'function');
+      if (missing.length) throw new Error('Runtime is missing expected exports: '+missing.join(', '));
+      els.loadMeterBar.style.width='25%';
+      setStage('MODEL_DOWNLOAD');
+      const modelBytes=await fetchCachedBytes(MODEL_URL,'model');
+      if (!modelBytes.length) throw new Error('The model download was empty.');
+      logDebug('MODEL_CHECK',{bytes:modelBytes.byteLength,first8Hex:Array.from(modelBytes.slice(0,8)).map(x=>x.toString(16).padStart(2,'0')).join(' ')},'ok');
+      els.loadMeterBar.style.width='82%';
+      setStatus('Starting model…');
+      setStage('CACTUS_LOAD',`modelBytes=${modelBytes.byteLength}`);
+      modelPtr=allocAndCopy(modelBytes);
+      logDebug('CACTUS_LOAD_CALL',`_cactus_load(ptr=${modelPtr}, size=BigInt(${modelBytes.byteLength}))`);
+      let loadCode, loadError='';
+      try {
+        loadCode=wasm._cactus_load(modelPtr,BigInt(modelBytes.byteLength));
+        loadError=getLastError();
+      } finally {
+        // The engine copies the archive during load, so the buffer can be released immediately.
+        try { wasm._free(modelPtr); } catch (_) {}
+        modelPtr=0;
+      }
+      logDebug('CACTUS_LOAD_RESULT',{returnValue:loadCode,lastError:loadError},loadCode<0?'error':'ok');
+      if (loadCode < 0) throw new Error(loadError || `cactus_load failed (${loadCode}).`);
+      // NEEDLE_TEXT=1, NEEDLE_SPEECH=2. Whistle is speech-only; cactus_init configures the text model and is not called.
+      const models=wasm._cactus_models();
+      logDebug('CACTUS_MODELS_AFTER_LOAD',{rawMask:models,textLoaded:!!(models & 1),speechLoaded:!!(models & 2)},(models & 2)?'ok':'error');
+      if (!(models & 2)) throw new Error(`Model loaded but speech flag is missing (cactus_models()=${models}). ${getLastError()}`);
+      modelReady=true;
+      setChip('Ready · on-device','ready');
+      els.loadMeterBar.style.width='100%';
+      setStage('MODEL_READY',`cactus_models()=${models}`);
+      setStatus('');
+      notify('Ready');
+    } catch (error) {
+      if (modelPtr && wasm) { try { wasm._free(modelPtr); } catch (_) {} }
+      console.error(error);
+      logDebug('LOAD_EXCEPTION',{stage:debugStage,error},'error');
+      loadFailed=true;
+      setChip('Setup failed','fail');
+      setStatus(`Setup failed (${debugStage}): ${error && error.message ? error.message : String(error)}`,true);
+      wasm=null;
+    } finally {
+      els.loadMeter.style.display='none';
+      setBusy(false);
+    }
+  }
+
+  // ---------- recording ----------
+  function chooseMimeType() {
+    if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) return '';
+    return ['audio/webm;codecs=opus','audio/webm','audio/mp4'].find(type=>MediaRecorder.isTypeSupported(type)) || '';
+  }
+  async function startRecording() {
+    if (!modelReady || busy || recorder) return;
+    if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setStatus('Microphone needs HTTPS (or localhost).',true); return;
+    }
+    if (!window.MediaRecorder) { setStatus('This browser does not support recording.',true); return; }
+    try {
+      micStream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+      recordedParts=[];
+      const mime=chooseMimeType();
+      recorder=mime ? new MediaRecorder(micStream,{mimeType:mime}) : new MediaRecorder(micStream);
+      recorder.ondataavailable=event=>{ if (event.data && event.data.size) recordedParts.push(event.data); };
+      recorder.onerror=event=>{ setStatus('Recording error: '+(event.error?.message || 'unknown'),true); cleanupRecorder(); setBusy(false); };
+      recorder.onstop=async()=>{
+        const blob=new Blob(recordedParts,{type:recorder && recorder.mimeType || 'audio/webm'});
+        logDebug('RECORDING_BLOB',{bytes:blob.size,mimeType:blob.type,parts:recordedParts.length},blob.size?'ok':'error');
+        cleanupRecorder();
+        if (!blob.size) { setStatus('No audio captured. Check microphone permission.',true); setBusy(false); return; }
+        await transcribeBlob(blob);
+      };
+      recordingStarted=Date.now();
+      recorder.start(250);
+      setStatus('');
+      els.timer.textContent='00:00';
+      timerHandle=setInterval(()=>{
+        const elapsed=(Date.now()-recordingStarted)/1000;
+        els.timer.textContent=`${formatDuration(elapsed)} / ${formatDuration(MAX_SECONDS)}`;
+        if (elapsed>=MAX_SECONDS && recorder && recorder.state==='recording') stopRecording();
+      },200);
+      renderMain();
+    } catch (error) {
+      cleanupRecorder(); setBusy(false);
+      setStatus(error && error.name==='NotAllowedError' ? 'Microphone permission denied. Allow it in site settings.' : (error.message || 'Could not start the microphone.'),true);
+    }
+  }
+  function cleanupRecorder() {
+    clearInterval(timerHandle); timerHandle=null;
+    if (micStream) { micStream.getTracks().forEach(track=>track.stop()); micStream=null; }
+    recorder=null;
+    els.timer.textContent='';
+    renderMain();
+  }
+  function stopRecording() {
+    if (recorder && recorder.state==='recording') {
+      setBusy(true,'Transcribing…');
+      recorder.stop();
+    }
+  }
+
+  // ---------- audio + transcription ----------
+  async function blobTo16kMono(blob) {
+    const AudioCtx=window.AudioContext || window.webkitAudioContext;
+    const OfflineCtx=window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!AudioCtx || !OfflineCtx) throw new Error('Web Audio is not available in this browser.');
+    const context=new AudioCtx();
+    try {
+      const decoded=await context.decodeAudioData(await blob.arrayBuffer());
+      logDebug('AUDIO_DECODED',{durationSeconds:decoded.duration,sampleRate:decoded.sampleRate,channels:decoded.numberOfChannels});
+      const frames=Math.max(1,Math.ceil(decoded.duration*SAMPLE_RATE));
+      const offline=new OfflineCtx(1,frames,SAMPLE_RATE);
+      const source=offline.createBufferSource(); source.buffer=decoded; source.connect(offline.destination); source.start(0);
+      const rendered=await offline.startRendering();
+      const samples=rendered.getChannelData(0).slice();
+      logDebug('AUDIO_RESAMPLED',{samples:samples.length,durationSeconds:+(samples.length/SAMPLE_RATE).toFixed(2)});
+      return samples;
+    } finally { try { await context.close(); } catch (_) {} }
+  }
+  function trimSilence(pcm) {
+    const frame=Math.round(SAMPLE_RATE*0.02); // 20 ms frames
+    const n=Math.floor(pcm.length/frame);
+    if (n<10) return pcm;
+    const rms=new Float32Array(n); let peak=0;
+    for (let i=0;i<n;i++) {
+      let sum=0; const base=i*frame;
+      for (let j=0;j<frame;j++) { const v=pcm[base+j]; sum+=v*v; }
+      rms[i]=Math.sqrt(sum/frame); if (rms[i]>peak) peak=rms[i];
+    }
+    const threshold=Math.max(0.01,peak*0.08);
+    let first=-1,last=-1;
+    for (let i=0;i<n;i++) if (rms[i]>=threshold) { if (first<0) first=i; last=i; }
+    if (first<0) { logDebug('TRIM_SILENCE','No frame above threshold; keeping full clip','warn'); return pcm; }
+    const pad=Math.round(SAMPLE_RATE*0.35); // keep 350 ms of context so word edges aren't clipped
+    const start=Math.max(0,first*frame-pad);
+    const end=Math.min(pcm.length,(last+1)*frame+pad);
+    const saved=(pcm.length-(end-start))/SAMPLE_RATE;
+    logDebug('TRIM_SILENCE',{threshold:+threshold.toFixed(4),originalSeconds:+(pcm.length/SAMPLE_RATE).toFixed(2),trimmedSeconds:+((end-start)/SAMPLE_RATE).toFixed(2),savedSeconds:+saved.toFixed(2)},'ok');
+    return saved>=0.5 ? pcm.slice(start,end) : pcm;
+  }
+  function parseTranscription(raw) {
+    const value=String(raw || '').trim();
+    if (!value) return {text:'',language:''};
+    try {
+      const parsed=JSON.parse(value);
+      if (typeof parsed==='string') return {text:parsed,language:''};
+      return {text:parsed.text || parsed.transcript || parsed.audio_text || parsed.response || '',language:parsed.language || parsed.audio_language || ''};
+    } catch (_) { return {text:value,language:''}; }
+  }
+  function runTranscription(pcm, language, keywords) {
+    setStage('CACTUS_TRANSCRIBE',`pcmSamples=${pcm.length}; language=${language||'auto'}; keywordCount=${keywords.length}`);
+    const pcmPtr=wasm._malloc(pcm.length*4);
+    if (!pcmPtr) throw new Error('Could not allocate audio memory. Try a shorter recording.');
+    const langPtr=allocString(language);
+    // Keywords are newline-separated words/phrases (not JSON).
+    const keyPtr=allocString(keywords.join('\n'));
+    const outPtr=wasm._malloc(OUTPUT_CAPACITY);
+    if (!outPtr) { wasm._free(pcmPtr); wasm._free(langPtr); wasm._free(keyPtr); throw new Error('Could not allocate output memory.'); }
+    try {
+      wasm.HEAPU8.set(new Uint8Array(pcm.buffer,pcm.byteOffset,pcm.byteLength),pcmPtr);
+      wasm.HEAPU8.fill(0,outPtr,outPtr+OUTPUT_CAPACITY);
+      const code=wasm._cactus_transcribe(pcmPtr,pcm.length,langPtr,keyPtr,0,outPtr,OUTPUT_CAPACITY);
+      const raw=decodeWasmString(outPtr);
+      logDebug('TRANSCRIBE_RESULT',{returnCode:code,lastError:getLastError(),rawResponse:raw.slice(0,600)},code<0?'error':'ok');
+      if (code < 0) throw new Error(getLastError() || `cactus_transcribe failed (${code}).`);
+      return parseTranscription(raw);
+    } finally {
+      wasm._free(pcmPtr); wasm._free(langPtr); wasm._free(keyPtr); wasm._free(outPtr);
+    }
+  }
+  async function transcribeBlob(blob) {
+    setBusy(true,'Transcribing…');
+    setStatus('');
+    try {
+      let pcm=await blobTo16kMono(blob);
+      if (!pcm.length) throw new Error('The recording contained no usable audio.');
+      if (pcm.length>SAMPLE_RATE*MAX_SECONDS) pcm=pcm.subarray(0,SAMPLE_RATE*MAX_SECONDS);
+      pcm=trimSilence(pcm);
+      const language=els.language.value;
+      const keywords=els.keywords.value.split(',').map(s=>s.trim()).filter(Boolean).slice(0,100);
+      // The engine call blocks the main thread; let the browser paint the button state first.
+      await new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,50)));
+      const result=runTranscription(pcm,language,keywords);
+      const text=result.text.trim();
+      if (!text) throw new Error('No speech detected. Try again closer to the mic.');
+      els.transcript.value=text; els.copyBtn.disabled=false;
+      els.transcriptMeta.textContent=`${(pcm.length/SAMPLE_RATE).toFixed(1)}s · ${result.language || language || 'auto'}`;
+      historyItems.unshift({id:Date.now(),createdAt:new Date().toISOString(),text,language:result.language || language || ''});
+      historyItems=historyItems.slice(0,50); persistHistory(); renderHistory();
+    } catch (error) {
+      console.error(error);
+      logDebug('TRANSCRIBE_EXCEPTION',{stage:debugStage,error},'error');
+      setStatus(error.message || String(error),true);
+    } finally { setBusy(false); }
+  }
+
+  // ---------- wiring ----------
+  window.addEventListener('error',event=>logDebug('WINDOW_ERROR',{message:event.message,source:event.filename,line:event.lineno,column:event.colno,error:event.error},'error'));
+  window.addEventListener('unhandledrejection',event=>logDebug('UNHANDLED_REJECTION',event.reason,'error'));
+  els.diagToggle.addEventListener('click',()=>{
+    const open=els.debugPanel.hidden;
+    els.debugPanel.hidden=!open;
+    els.diagToggle.setAttribute('aria-expanded',String(open));
+    els.diagToggle.textContent=open?'Hide diagnostics':'Diagnostics';
+    if (open) { renderDebug(); els.debugPanel.scrollIntoView({behavior:'smooth',block:'nearest'}); }
+  });
+  els.copyDebugBtn.addEventListener('click',copyDebugLog);
+  els.clearDebugBtn.addEventListener('click',()=>{ debugLines.length=0; els.debugLog.textContent='Log cleared.'; logDebug('LOG','Diagnostic log cleared'); });
+  els.recordBtn.addEventListener('click',()=>{
+    if (recorder && recorder.state==='recording') stopRecording();
+    else if (busy) return;
+    else if (!modelReady) loadModel();
+    else startRecording();
+  });
+  els.copyBtn.addEventListener('click',()=>copyText(els.transcript.value));
+  els.transcript.addEventListener('input',()=>{ els.copyBtn.disabled=!els.transcript.value.trim(); });
+  els.clearHistoryBtn.addEventListener('click',()=>{
+    if (!historyItems.length) return;
+    if (!confirm('Delete all saved transcripts from this browser?')) return;
+    historyItems=[]; persistHistory(); renderHistory(); notify('History cleared');
+  });
+
+  logDebug('PAGE_INFO',{url:location.href,secureContext:window.isSecureContext,userAgent:navigator.userAgent,wasmSupported:typeof WebAssembly==='object',mediaRecorder:typeof MediaRecorder==='function',cacheApi:'caches' in window},'ok');
+  renderHistory();
+  renderMain();
+
+  // Startup: if the model is already cached, load it automatically; otherwise wait for a tap.
+  (async () => {
+    try {
+      if (!window.isSecureContext) { setStatus('Open this page over HTTPS to use the microphone.',true); }
+      else if (!navigator.mediaDevices?.getUserMedia) { setStatus('This browser cannot access the microphone.',true); }
+      if ('caches' in window && window.isSecureContext) {
+        const cache=await caches.open(CACHE_NAME);
+        if (await cache.match(MODEL_URL) && await cache.match(ENGINE_BASE+'cactus.wasm') && await cache.match(ENGINE_JS)) {
+          logDebug('AUTOLOAD','Model found in cache; loading automatically','ok');
+          loadModel();
+          return;
+        }
+      }
+    } catch (e) { logDebug('AUTOLOAD_CHECK_FAIL',e,'warn'); }
+    setBusy(false);
+  })();
+})();
+</script>
+</body>
+</html>
