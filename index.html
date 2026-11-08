@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#101713">
+<meta name="description" content="Private, on-device voice transcription powered by Cactus Whistle.">
+<title>Whistle — local voice notes</title>
+<style>
+  :root{color-scheme:dark;--bg:#0c120f;--panel:#141e18;--panel2:#19261e;--line:#29382e;--text:#edf5ed;--muted:#a0b2a4;--green:#a6e6ad;--green2:#77cb8a;--danger:#ff938b;--shadow:0 16px 44px rgba(0,0,0,.28)}
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(900px 480px at 50% -160px,#253d2c 0%,transparent 68%),var(--bg);color:var(--text);font:16px/1.45 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100vh;padding:calc(18px + env(safe-area-inset-top)) 16px calc(28px + env(safe-area-inset-bottom))}
+  .wrap{max-width:720px;margin:0 auto}
+  header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:2px 0 22px}
+  .brand{display:flex;align-items:center;gap:12px}
+  .logo{width:42px;height:42px;border-radius:14px;background:#1e3325;display:grid;place-items:center;color:var(--green);font-size:23px;border:1px solid #355640}
+  h1{font-size:20px;letter-spacing:-.5px;margin:0;font-weight:750}
+  .subtitle{color:var(--muted);font-size:12px;margin-top:2px}
+  .local-pill{border:1px solid #385241;color:#bceac3;border-radius:99px;padding:6px 10px;font-size:11px;white-space:nowrap;letter-spacing:.2px}
+  .hero{background:linear-gradient(145deg,#1a2a20,#121b16);border:1px solid #2d4033;border-radius:22px;padding:20px;box-shadow:var(--shadow)}
+  .eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:1.15px;color:var(--green);font-weight:750;margin:0 0 8px}
+  h2{font-size:24px;line-height:1.12;letter-spacing:-.8px;margin:0 0 8px}
+  .intro{color:#bac9bc;font-size:14px;margin:0;max-width:560px}
+  .model-row{display:flex;align-items:center;gap:10px;margin-top:18px;flex-wrap:wrap}
+  .model-indicator{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:7px;min-width:0;flex:1}
+  .dot{width:8px;height:8px;border-radius:50%;background:#d3ad60;box-shadow:0 0 0 3px rgba(211,173,96,.12);flex:none}
+  .dot.ready{background:var(--green2);box-shadow:0 0 0 3px rgba(119,203,138,.13)}
+  button,select,input,textarea{font:inherit}
+  button{border:0;cursor:pointer;touch-action:manipulation}
+  button:disabled{opacity:.42;cursor:not-allowed}
+  .btn{border-radius:12px;padding:11px 15px;font-size:13px;font-weight:700;transition:transform .08s ease,filter .15s ease}
+  .btn:active:not(:disabled){transform:scale(.98)}
+  .btn-primary{background:var(--green);color:#102016}
+  .btn-secondary{background:#25372a;color:#d8eadb;border:1px solid #3a5140}
+  .btn-quiet{background:transparent;color:var(--muted);padding:8px 10px;border:1px solid var(--line)}
+  .btn-danger{background:transparent;color:var(--danger);border:1px solid #653c3a}
+  .record-area{display:grid;place-items:center;padding:24px 12px 14px}
+  .record-button{width:100%;max-width:320px;min-height:60px;border-radius:18px;background:var(--green);color:#102016;font-size:17px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:12px;box-shadow:0 8px 26px rgba(107,199,126,.18)}
+  .record-button.recording{background:#e68178;color:#28100e;box-shadow:0 8px 26px rgba(230,129,120,.16)}
+  .mic{width:19px;height:19px;border:2px solid currentColor;border-radius:12px;position:relative;display:inline-block}
+  .mic:before{content:"";position:absolute;width:7px;height:11px;border:2px solid currentColor;border-top:0;border-radius:0 0 7px 7px;left:4px;top:5px}
+  .mic:after{content:"";position:absolute;width:13px;height:5px;border:2px solid currentColor;border-top:0;border-radius:0 0 9px 9px;left:1px;top:12px}
+  .record-hint{color:var(--muted);font-size:12px;margin-top:10px;text-align:center}
+  .timer{font-variant-numeric:tabular-nums;font-size:13px;color:#ffe0dc;margin-top:8px;min-height:19px}
+  .meter{height:4px;background:#26342a;border-radius:99px;overflow:hidden;margin:12px 0 0;display:none}
+  .meter>span{display:block;height:100%;width:0;background:var(--green);transition:width .15s}
+  .settings{display:grid;grid-template-columns:1fr 1.2fr;gap:10px;margin-top:14px}
+  .field label{display:block;color:var(--muted);font-size:11px;margin:0 0 6px 2px}
+  select,input{width:100%;background:#0e1711;border:1px solid #304337;color:var(--text);border-radius:11px;padding:11px 12px;outline:none;min-height:43px}
+  select:focus,input:focus,textarea:focus{border-color:#78ba83;box-shadow:0 0 0 3px rgba(120,186,131,.13)}
+  .field small{display:block;color:#809287;font-size:10px;margin:5px 2px 0}
+  .section{margin-top:18px;background:var(--panel);border:1px solid var(--line);border-radius:19px;padding:17px}
+  .section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+  .section-head h3{margin:0;font-size:15px;letter-spacing:-.2px}
+  .section-head .meta{font-size:11px;color:var(--muted)}
+  .status{font-size:12px;color:var(--muted);margin:12px 2px 0;min-height:18px}
+  .status.error{color:var(--danger)}
+  .output-actions{display:flex;gap:8px;align-items:center}
+  textarea{width:100%;resize:vertical;min-height:130px;background:#0d1510;color:var(--text);border:1px solid #304036;border-radius:12px;padding:13px;font-size:15px;line-height:1.55;outline:none}
+  .empty{color:#819187;font-size:13px;text-align:center;padding:24px 10px}
+  .history-list{display:flex;flex-direction:column;gap:9px}
+  .history-item{border:1px solid #2a392f;background:#111a14;border-radius:13px;padding:12px}
+  .history-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px}
+  .history-date{font-size:10px;color:#94a699}
+  .history-preview{font-size:13px;color:#e2ece4;white-space:pre-wrap;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;cursor:pointer}
+  .history-bottom{display:flex;justify-content:flex-end;gap:7px;margin-top:8px}
+  .mini{font-size:11px;padding:7px 10px;border-radius:9px}
+  .footer{color:#7f9085;font-size:11px;line-height:1.5;text-align:center;margin:18px 4px 0}
+  .footer a{color:#a8dcb0;text-decoration:none}
+  .toast{position:fixed;left:50%;bottom:calc(22px + env(safe-area-inset-bottom));transform:translate(-50%,18px);opacity:0;pointer-events:none;background:#e6f4e8;color:#122017;border-radius:12px;padding:10px 15px;font-size:13px;font-weight:750;box-shadow:var(--shadow);transition:.2s;z-index:20;max-width:calc(100vw - 32px);text-align:center}
+  .toast.show{transform:translate(-50%,0);opacity:1}
+  @media(max-width:480px){body{padding-left:12px;padding-right:12px}.hero{padding:17px}.settings{grid-template-columns:1fr}.section{padding:14px}h2{font-size:22px}.local-pill{font-size:10px;padding:5px 8px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand"><div class="logo" aria-hidden="true">🌵</div><div><h1>Whistle</h1><div class="subtitle">Private voice notes · powered by Cactus</div></div></div>
+    <div class="local-pill">● ON-DEVICE TRANSCRIPTION</div>
+  </header>
+
+  <main>
+    <section class="hero" aria-labelledby="main-title">
+      <p class="eyebrow">Your voice stays on your phone</p>
+      <h2 id="main-title">Speak. Transcribe. Copy.</h2>
+      <p class="intro">Record a short voice note and turn it into text with Cactus Whistle running in your browser. Audio is processed on this device; no transcription API is called.</p>
+
+      <div class="model-row">
+        <div class="model-indicator"><span class="dot" id="modelDot"></span><span id="modelStatus">Model not loaded · first setup downloads about 18 MB</span></div>
+        <button class="btn btn-secondary" id="loadBtn">Load model</button>
+      </div>
+      <div class="meter" id="loadMeter"><span id="loadMeterBar"></span></div>
+
+      <div class="record-area">
+        <button class="record-button" id="recordBtn" disabled><span class="mic" aria-hidden="true"></span><span id="recordLabel">Load model to start</span></button>
+        <div class="timer" id="timer"></div>
+        <div class="record-hint" id="recordHint">Allow microphone access when your browser asks. Maximum recording: 30 seconds.</div>
+      </div>
+
+      <div class="settings">
+        <div class="field"><label for="language">Language</label><select id="language"><option value="">Auto-detect</option><option value="en">English</option><option value="de">German</option><option value="fr">French</option><option value="es">Spanish</option><option value="it">Italian</option><option value="nl">Dutch</option><option value="pl">Polish</option></select></div>
+        <div class="field"><label for="keywords">Name / word hints (optional)</label><input id="keywords" type="text" placeholder="e.g. Siobhan, Orchard, Cactus"><small>Separate hints with commas to improve recognition of uncommon terms.</small></div>
+      </div>
+      <div class="status" id="status" role="status" aria-live="polite">Load the model once while online. The browser will cache it for later use.</div>
+    </section>
+
+    <section class="section" aria-labelledby="transcript-title">
+      <div class="section-head"><h3 id="transcript-title">Transcript</h3><div class="output-actions"><button class="btn btn-primary" id="copyBtn" disabled>Copy text</button></div></div>
+      <textarea id="transcript" placeholder="Your transcript will appear here. You can edit it before copying." spellcheck="true"></textarea>
+      <div class="status" id="transcriptMeta">Nothing transcribed yet.</div>
+    </section>
+
+    <section class="section" aria-labelledby="history-title">
+      <div class="section-head"><h3 id="history-title">History <span class="meta" id="historyCount">(0)</span></h3><button class="btn btn-danger mini" id="clearHistoryBtn" disabled>Clear history</button></div>
+      <div class="history-list" id="historyList"><div class="empty">Your saved transcripts will appear here.</div></div>
+    </section>
+  </main>
+
+  <div class="footer">History is saved in this browser only. Audio is not saved. The first model download needs internet; after caching, the model can be reused offline when this page is hosted as an installed/accessible web app. Use HTTPS (or localhost) for microphone access.<br><br>Built on the published <a href="https://cactuscompute.com/blog/whistle" target="_blank" rel="noopener">Whistle model</a> and <a href="https://huggingface.co/Cactus-Compute/cactus/tree/main/releases/4.0.0/wasm" target="_blank" rel="noopener">Cactus browser runtime</a>.</div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  'use strict';
+  const ENGINE_BASE = 'https://huggingface.co/Cactus-Compute/cactus/resolve/main/releases/4.0.0/wasm/';
+  const ENGINE_JS = ENGINE_BASE + 'cactus.js';
+  const MODEL_URL = 'https://huggingface.co/Cactus-Compute/whistle/resolve/main/whistle.cact';
+  const CACHE_NAME = 'cactus-whistle-assets-v4';
+  const HISTORY_KEY = 'cactus-whistle-history-v1';
+  const SAMPLE_RATE = 16000;
+  const MAX_SECONDS = 30;
+  const OUTPUT_CAPACITY = 256 * 1024;
+
+  const $ = id => document.getElementById(id);
+  const els = {
+    loadBtn:$('loadBtn'), modelDot:$('modelDot'), modelStatus:$('modelStatus'), loadMeter:$('loadMeter'), loadMeterBar:$('loadMeterBar'),
+    recordBtn:$('recordBtn'), recordLabel:$('recordLabel'), recordHint:$('recordHint'), timer:$('timer'), status:$('status'),
+    language:$('language'), keywords:$('keywords'), transcript:$('transcript'), transcriptMeta:$('transcriptMeta'), copyBtn:$('copyBtn'),
+    historyList:$('historyList'), historyCount:$('historyCount'), clearHistoryBtn:$('clearHistoryBtn'), toast:$('toast')
+  };
+
+  let wasm = null;
+  let modelReady = false;
+  let busy = false;
+  let recorder = null;
+  let micStream = null;
+  let recordedParts = [];
+  let recordingStarted = 0;
+  let timerHandle = null;
+  let lastResult = '';
+  let historyItems = loadHistory();
+  let toastHandle = null;
+
+  function setStatus(message, isError=false) {
+    els.status.textContent = message;
+    els.status.classList.toggle('error', isError);
+  }
+  function notify(message) {
+    els.toast.textContent = message;
+    els.toast.classList.add('show');
+    clearTimeout(toastHandle);
+    toastHandle = setTimeout(() => els.toast.classList.remove('show'), 1900);
+  }
+  function loadHistory() {
+    try { const value = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); return Array.isArray(value) ? value : []; }
+    catch (_) { return []; }
+  }
+  function persistHistory() {
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(historyItems.slice(0,50))); }
+    catch (_) { setStatus('Transcript created, but browser storage is full or unavailable. Copy the text to keep it.', true); }
+  }
+  function renderHistory() {
+    els.historyCount.textContent = `(${historyItems.length})`;
+    els.clearHistoryBtn.disabled = historyItems.length === 0;
+    els.historyList.replaceChildren();
+    if (!historyItems.length) {
+      const empty = document.createElement('div'); empty.className='empty'; empty.textContent='Your saved transcripts will appear here.'; els.historyList.appendChild(empty); return;
+    }
+    historyItems.forEach(item => {
+      const card=document.createElement('article'); card.className='history-item';
+      const top=document.createElement('div'); top.className='history-top';
+      const date=document.createElement('div'); date.className='history-date'; date.textContent = new Date(item.createdAt).toLocaleString();
+      const lang=document.createElement('div'); lang.className='history-date'; lang.textContent = item.language || 'Language not detected';
+      top.append(date,lang);
+      const preview=document.createElement('div'); preview.className='history-preview'; preview.textContent=item.text; preview.title='Tap to load this transcript into the editor';
+      preview.addEventListener('click',()=>loadHistoryItem(item));
+      const bottom=document.createElement('div'); bottom.className='history-bottom';
+      const copy=document.createElement('button'); copy.className='btn btn-secondary mini'; copy.textContent='Copy'; copy.addEventListener('click',()=>copyText(item.text));
+      const edit=document.createElement('button'); edit.className='btn btn-quiet mini'; edit.textContent='Open'; edit.addEventListener('click',()=>loadHistoryItem(item));
+      bottom.append(edit,copy); card.append(top,preview,bottom); els.historyList.appendChild(card);
+    });
+  }
+  function loadHistoryItem(item) {
+    els.transcript.value=item.text;
+    lastResult=item.text;
+    els.copyBtn.disabled=!item.text;
+    els.transcriptMeta.textContent=`History item · ${new Date(item.createdAt).toLocaleString()}`;
+    els.transcript.scrollIntoView({behavior:'smooth',block:'center'});
+  }
+  async function copyText(value) {
+    if (!value) return;
+    try {
+      if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(value);
+      else {
+        els.transcript.value=value; els.transcript.focus(); els.transcript.select();
+        const ok=document.execCommand('copy'); window.getSelection()?.removeAllRanges();
+        if (!ok) throw new Error('Clipboard unavailable');
+      }
+      notify('Copied to clipboard');
+    } catch (error) { notify('Copy was blocked by the browser. Select the text and copy it.'); }
+  }
+  function formatDuration(seconds) {
+    const n=Math.max(0,Math.floor(seconds)); return `${String(Math.floor(n/60)).padStart(2,'0')}:${String(n%60).padStart(2,'0')}`;
+  }
+  function setBusy(value) {
+    busy=value;
+    els.loadBtn.disabled=value || modelReady;
+    els.recordBtn.disabled=value || !modelReady;
+    els.language.disabled=value;
+    els.keywords.disabled=value;
+    if (modelReady && !recorder) els.recordLabel.textContent='Start recording';
+  }
+  function decodeWasmString(ptr) {
+    if (!ptr || !wasm) return '';
+    const heap=wasm.HEAPU8; let end=ptr;
+    while (end < heap.length && heap[end] !== 0 && end-ptr < 8192) end++;
+    return new TextDecoder().decode(heap.subarray(ptr,end));
+  }
+  function allocAndCopy(bytes) {
+    const ptr=wasm._malloc(bytes.byteLength || 1);
+    if (!ptr) throw new Error('Could not allocate memory in the Cactus WASM runtime.');
+    wasm.HEAPU8.set(bytes,ptr);
+    return ptr;
+  }
+  function allocString(value) {
+    const bytes=new TextEncoder().encode(String(value) + '\0');
+    return allocAndCopy(bytes);
+  }
+  function getLastError() {
+    try { return decodeWasmString(wasm._cactus_last_error()); } catch (_) { return ''; }
+  }
+  async function fetchCachedBytes(url, label) {
+    let cache=null;
+    try { if ('caches' in window && window.isSecureContext) cache=await caches.open(CACHE_NAME); } catch (_) {}
+    if (cache) {
+      try {
+        const cached=await cache.match(url);
+        if (cached) { setStatus(`${label}: loaded from this browser's cache.`); return new Uint8Array(await cached.arrayBuffer()); }
+      } catch (_) {}
+    }
+    const response=await fetch(url,{mode:'cors'});
+    if (!response.ok) throw new Error(`Download failed (${response.status}) while fetching ${label}.`);
+    const total=Number(response.headers.get('content-length')) || 0;
+    let bytes;
+    if (response.body && response.body.getReader) {
+      const reader=response.body.getReader(); const chunks=[]; let received=0;
+      while (true) {
+        const part=await reader.read(); if (part.done) break;
+        chunks.push(part.value); received+=part.value.length;
+        if (total) {
+          const pct=Math.min(100,Math.round(received/total*100));
+          els.loadMeter.style.display='block'; els.loadMeterBar.style.width=pct+'%';
+          setStatus(`${label}: downloading ${pct}%…`);
+        } else setStatus(`${label}: downloading ${(received/1048576).toFixed(1)} MB…`);
+      }
+      bytes=new Uint8Array(received); let offset=0;
+      for (const chunk of chunks) { bytes.set(chunk,offset); offset+=chunk.length; }
+    } else bytes=new Uint8Array(await response.arrayBuffer());
+    if (cache) {
+      try { await cache.put(url,new Response(bytes,{headers:{'Content-Type':response.headers.get('content-type') || 'application/octet-stream'}})); } catch (_) {}
+    }
+    return bytes;
+  }
+  async function loadEngineScript() {
+    if (typeof window.createCactus === 'function') return;
+    const existing=document.querySelector('script[data-cactus-engine]');
+    if (existing) {
+      await new Promise((resolve,reject)=>{ existing.addEventListener('load',resolve,{once:true}); existing.addEventListener('error',()=>reject(new Error('Could not load cactus.js.')),{once:true}); });
+      return;
+    }
+    const scriptBytes=await fetchCachedBytes(ENGINE_JS,'Cactus JavaScript engine');
+    const scriptUrl=URL.createObjectURL(new Blob([scriptBytes],{type:'text/javascript'}));
+    await new Promise((resolve,reject)=>{
+      const script=document.createElement('script'); script.src=scriptUrl; script.async=true; script.dataset.cactusEngine='1';
+      script.onload=()=>{ URL.revokeObjectURL(scriptUrl); resolve(); };
+      script.onerror=()=>{ URL.revokeObjectURL(scriptUrl); script.remove(); reject(new Error('Could not run the Cactus engine script. Check the browser and hosting security settings.')); };
+      document.head.appendChild(script);
+    });
+  }
+  async function loadModel() {
+    if (modelReady || busy) return;
+    setBusy(true); els.loadBtn.textContent='Loading…'; els.loadMeter.style.display='block'; els.loadMeterBar.style.width='3%';
+    try {
+      setStatus('Loading the Cactus JavaScript engine…');
+      await loadEngineScript();
+      if (typeof window.createCactus !== 'function') throw new Error('The Cactus runtime script loaded, but its createCactus factory was not found.');
+      setStatus('Loading the small WebAssembly engine…');
+      const wasmBytes=await fetchCachedBytes(ENGINE_BASE+'cactus.wasm','Cactus WASM engine');
+      wasm=await window.createCactus({
+        wasmBinary:wasmBytes.buffer.slice(wasmBytes.byteOffset,wasmBytes.byteOffset+wasmBytes.byteLength),
+        locateFile:(path)=> ENGINE_BASE+path,
+        print:(line)=>console.log('[Cactus]',line),
+        printErr:(line)=>console.warn('[Cactus]',line)
+      });
+      const required=['_malloc','_free','_cactus_load','_cactus_init','_cactus_transcribe'];
+      const missing=required.filter(name=>typeof wasm[name] !== 'function');
+      if (missing.length) throw new Error('This runtime build is missing expected C API exports: '+missing.join(', ')+'.');
+      els.loadMeterBar.style.width='25%';
+      setStatus('Downloading Whistle weights (about 16.9 MB) on first use…');
+      const modelBytes=await fetchCachedBytes(MODEL_URL,'Whistle model');
+      if (!modelBytes.length) throw new Error('The Whistle model download was empty.');
+      els.loadMeterBar.style.width='82%'; setStatus('Loading Whistle into the local WASM engine…');
+      const modelPtr=allocAndCopy(modelBytes);
+      let loadCode;
+      try { loadCode=wasm._cactus_load(modelPtr,BigInt(modelBytes.byteLength)); }
+      finally { wasm._free(modelPtr); }
+      if (loadCode < 0) throw new Error(getLastError() || `cactus_load failed (${loadCode}).`);
+      const initCode=wasm._cactus_init(0,0,0);
+      if (initCode < 0) throw new Error(getLastError() || `cactus_init failed (${initCode}).`);
+      modelReady=true;
+      els.modelDot.classList.add('ready'); els.modelStatus.textContent='Whistle ready · running locally';
+      els.loadBtn.textContent='Model ready'; els.loadBtn.disabled=true;
+      els.recordBtn.disabled=false; els.recordLabel.textContent='Start recording';
+      els.loadMeterBar.style.width='100%'; setStatus('Ready. Record a note; audio is converted to 16 kHz mono and transcribed on this device.');
+      notify('Whistle model is ready');
+    } catch (error) {
+      console.error(error);
+      const msg=error && error.message ? error.message : String(error);
+      setStatus(msg+' Make sure this page is opened over HTTPS and try again.',true);
+      els.modelStatus.textContent='Model load failed'; els.loadBtn.textContent='Retry load';
+      if (wasm) { wasm=null; }
+    } finally {
+      busy=false;
+      if (!modelReady) els.loadBtn.disabled=false;
+      els.recordBtn.disabled=!modelReady;
+      els.loadMeter.style.display=modelReady?'none':'block';
+    }
+  }
+  function chooseMimeType() {
+    if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) return '';
+    const options=['audio/webm;codecs=opus','audio/webm','audio/mp4'];
+    return options.find(type=>MediaRecorder.isTypeSupported(type)) || '';
+  }
+  async function startRecording() {
+    if (!modelReady || busy || recorder) return;
+    if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setStatus('Microphone access needs a secure page (HTTPS or localhost). Open this HTML from an HTTPS website, not directly as a file.',true); return;
+    }
+    if (!window.MediaRecorder) { setStatus('This browser does not support MediaRecorder. Try a recent version of Chrome on Android.',true); return; }
+    try {
+      micStream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+      recordedParts=[];
+      const mime=chooseMimeType();
+      recorder=mime ? new MediaRecorder(micStream,{mimeType:mime}) : new MediaRecorder(micStream);
+      recorder.ondataavailable=event=>{ if (event.data && event.data.size) recordedParts.push(event.data); };
+      recorder.onerror=event=>{ setStatus('Recording error: '+(event.error?.message || 'unknown error'),true); cleanupRecorder(); };
+      recorder.onstop=async()=>{
+        const blob=new Blob(recordedParts,{type:recorder && recorder.mimeType || 'audio/webm'});
+        cleanupRecorder();
+        if (!blob.size) { setStatus('No audio was captured. Check microphone permission and try again.',true); return; }
+        await transcribeBlob(blob);
+      };
+      recordingStarted=Date.now();
+      recorder.start(250);
+      els.recordBtn.classList.add('recording'); els.recordLabel.textContent='Stop & transcribe';
+      els.recordHint.textContent='Recording… tap the button to finish. Maximum 30 seconds.';
+      els.timer.textContent='00:00';
+      timerHandle=setInterval(()=>{
+        const elapsed=(Date.now()-recordingStarted)/1000;
+        els.timer.textContent=formatDuration(elapsed);
+        if (elapsed>=MAX_SECONDS && recorder && recorder.state==='recording') stopRecording();
+      },200);
+      setStatus('Recording. Speak clearly and keep the phone microphone unobstructed.');
+    } catch (error) {
+      cleanupRecorder();
+      const msg=error && error.name==='NotAllowedError' ? 'Microphone permission was denied. Allow microphone access in your browser site settings.' : (error.message || 'Could not start the microphone.');
+      setStatus(msg,true);
+    }
+  }
+  function cleanupRecorder() {
+    clearInterval(timerHandle); timerHandle=null;
+    if (micStream) { micStream.getTracks().forEach(track=>track.stop()); micStream=null; }
+    recorder=null;
+    els.recordBtn.classList.remove('recording');
+    els.recordLabel.textContent=modelReady?'Start recording':'Load model to start';
+    els.recordHint.textContent='Allow microphone access when your browser asks. Maximum recording: 30 seconds.';
+    els.timer.textContent='';
+  }
+  function stopRecording() {
+    if (recorder && recorder.state==='recording') {
+      els.recordBtn.disabled=true; els.recordLabel.textContent='Preparing audio…';
+      recorder.stop();
+    }
+  }
+  async function blobTo16kMono(blob) {
+    const AudioCtx=window.AudioContext || window.webkitAudioContext;
+    const OfflineCtx=window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!AudioCtx || !OfflineCtx) throw new Error('Web Audio is not available in this browser.');
+    const context=new AudioCtx();
+    try {
+      const decoded=await context.decodeAudioData(await blob.arrayBuffer());
+      const frames=Math.max(1,Math.ceil(decoded.duration*SAMPLE_RATE));
+      const offline=new OfflineCtx(1,frames,SAMPLE_RATE);
+      const source=offline.createBufferSource(); source.buffer=decoded; source.connect(offline.destination); source.start(0);
+      const rendered=await offline.startRendering();
+      return rendered.getChannelData(0).slice();
+    } finally { try { await context.close(); } catch (_) {} }
+  }
+  function parseTranscription(raw) {
+    const value=String(raw || '').trim();
+    if (!value) return {text:'',language:''};
+    try {
+      const parsed=JSON.parse(value);
+      if (typeof parsed==='string') return {text:parsed,language:''};
+      return {text:parsed.text || parsed.transcript || parsed.audio_text || '',language:parsed.language || parsed.audio_language || '',meta:parsed};
+    } catch (_) { return {text:value,language:''}; }
+  }
+  function runTranscription(pcm, language, keywords) {
+    const pcmPtr=wasm._malloc(pcm.length*4);
+    if (!pcmPtr) throw new Error('Could not allocate audio memory. Try a shorter recording.');
+    const langPtr=allocString(language);
+    const keyPtr=allocString(JSON.stringify(keywords));
+    const outPtr=wasm._malloc(OUTPUT_CAPACITY);
+    if (!outPtr) { wasm._free(pcmPtr); wasm._free(langPtr); wasm._free(keyPtr); throw new Error('Could not allocate output memory.'); }
+    try {
+      wasm.HEAPU8.set(new Uint8Array(pcm.buffer,pcm.byteOffset,pcm.byteLength),pcmPtr);
+      wasm.HEAPU8.fill(0,outPtr,outPtr+OUTPUT_CAPACITY);
+      const code=wasm._cactus_transcribe(pcmPtr,pcm.length,langPtr,keyPtr,0,outPtr,OUTPUT_CAPACITY);
+      const raw=decodeWasmString(outPtr);
+      if (code < 0) throw new Error(getLastError() || `cactus_transcribe failed (${code}).`);
+      return parseTranscription(raw);
+    } finally {
+      wasm._free(pcmPtr); wasm._free(langPtr); wasm._free(keyPtr); wasm._free(outPtr);
+    }
+  }
+  async function transcribeBlob(blob) {
+    setBusy(true); els.recordBtn.disabled=true;
+    setStatus('Converting recording to 16 kHz mono audio…');
+    try {
+      const pcm=await blobTo16kMono(blob);
+      if (!pcm.length) throw new Error('The recording contained no usable audio.');
+      const language=els.language.value;
+      const keywords=els.keywords.value.split(',').map(s=>s.trim()).filter(Boolean).slice(0,100);
+      setStatus('Whistle is transcribing on this phone. This can take a moment…');
+      // Cactus Whistle is designed for clips up to 30 seconds in one pass.
+      const result=runTranscription(pcm,language,keywords);
+      if (!result.text.trim()) throw new Error('No speech was detected. Try speaking closer to the microphone or recording in a quieter place.');
+      lastResult=result.text.trim();
+      els.transcript.value=lastResult; els.copyBtn.disabled=false;
+      const detected=result.language ? ` · ${result.language}` : (language ? ` · ${language}` : ' · language auto-detected');
+      const seconds=(pcm.length/SAMPLE_RATE).toFixed(1);
+      els.transcriptMeta.textContent=`${seconds}s audio${detected}`;
+      historyItems.unshift({id:Date.now(),createdAt:new Date().toISOString(),text:lastResult,language:result.language || language || 'Auto'});
+      historyItems=historyItems.slice(0,50); persistHistory(); renderHistory();
+      setStatus('Transcription complete. Your audio was processed locally and was not saved.');
+      notify('Transcript saved to history');
+    } catch (error) {
+      console.error(error); setStatus(error.message || String(error),true);
+    } finally { setBusy(false); }
+  }
+
+  els.loadBtn.addEventListener('click',loadModel);
+  els.recordBtn.addEventListener('click',()=>{
+    if (recorder && recorder.state==='recording') stopRecording();
+    else if (!busy) startRecording();
+  });
+  els.copyBtn.addEventListener('click',()=>copyText(els.transcript.value));
+  els.transcript.addEventListener('input',()=>{ els.copyBtn.disabled=!els.transcript.value.trim(); });
+  els.clearHistoryBtn.addEventListener('click',()=>{
+    if (!historyItems.length) return;
+    if (!confirm('Delete all saved transcript history from this browser?')) return;
+    historyItems=[]; persistHistory(); renderHistory(); notify('History cleared');
+  });
+  renderHistory();
+  if (!window.isSecureContext) setStatus('For microphone access, host this HTML on HTTPS or open it via localhost. A direct file:// tab will not have microphone permission.',true);
+  else if (!navigator.mediaDevices?.getUserMedia) setStatus('This browser does not expose microphone capture. Try the latest Chrome on Android.',true);
+})();
+</script>
+</body>
+</html>
