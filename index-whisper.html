@@ -89,13 +89,9 @@
     <section class="card">
       <div class="opts">
         <select id="engine" aria-label="Engine">
-          <option value="whisper-base">Phone · Whisper Base (~40 MB, fastest)</option>
-          <option value="whisper-small">Phone · Whisper Small (~130 MB)</option>
-          <option value="whisper-turbo">Phone · Whisper Turbo (~800 MB, best)</option>
+          <option value="whisper-small">Phone · Whisper Small.en (~130 MB)</option>
+          <option value="whisper-base">Phone · Whisper Base.en (~40 MB, faster)</option>
           <option value="remote">My PC · Qwen3-ASR (best accents)</option>
-        </select>
-        <select id="language" aria-label="Language" style="flex:0 0 34%">
-          <option value="english">English</option><option value="">Auto</option><option value="german">German</option><option value="french">French</option><option value="spanish">Spanish</option><option value="italian">Italian</option><option value="dutch">Dutch</option><option value="polish">Polish</option><option value="portuguese">Portuguese</option><option value="hindi">Hindi</option>
         </select>
       </div>
       <div class="remote" id="remoteBox" hidden>
@@ -128,15 +124,14 @@
   'use strict';
   const TJS = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.2';
   const MODELS = {
-    'whisper-small': { id: 'onnx-community/whisper-small.en', label: 'Whisper Small' },
-    'whisper-turbo': { id: 'onnx-community/whisper-large-v3-turbo', label: 'Whisper Turbo' },
-    'whisper-base':  { id: 'onnx-community/whisper-base.en', label: 'Whisper Base' }
+    'whisper-small': { id: 'onnx-community/whisper-small.en', label: 'Whisper Small.en' },
+    'whisper-base':  { id: 'onnx-community/whisper-base.en', label: 'Whisper Base.en' }
   };
   const HISTORY_KEY = 'whistle-history-v2', PREFS_KEY = 'whistle-prefs-v2';
   const SR = 16000, MAX_SECONDS = 120;
 
   const $ = id => document.getElementById(id);
-  const el = Object.fromEntries(['dot','chip','recordBtn','recordLabel','meter','meterBar','timer','status','engine','language','remoteBox','remoteUrl','remoteKey','transcript','meta','copyBtn','historySection','historyList','historyCount','clearHistoryBtn','toast','diagToggle','debugPanel','debugLog','copyDebugBtn','clearDebugBtn'].map(i => [i, $(i)]));
+  const el = Object.fromEntries(['dot','chip','recordBtn','recordLabel','meter','meterBar','timer','status','engine','remoteBox','remoteUrl','remoteKey','transcript','meta','copyBtn','historySection','historyList','historyCount','clearHistoryBtn','toast','diagToggle','debugPanel','debugLog','copyDebugBtn','clearDebugBtn'].map(i => [i, $(i)]));
 
   let worker = null, loadedKey = '', ready = false, loading = false, busy = false;
   let recorder = null, mic = null, parts = [], t0 = 0, tick = null, toastT = null;
@@ -174,16 +169,15 @@
     el.recordBtn.classList.toggle('recording', rec);
     $('recordLabel').textContent = label;
     el.recordBtn.disabled = disabled;
-    for (const k of ['engine', 'language', 'remoteUrl', 'remoteKey']) el[k].disabled = loading || busy || rec;
+    for (const k of ['engine', 'remoteUrl', 'remoteKey']) el[k].disabled = loading || busy || rec;
     el.remoteBox.hidden = !isRemote();
   }
   const dur = s => { s = Math.max(0, Math.floor(s)); return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; };
-  function savePrefs() { try { localStorage.setItem(PREFS_KEY, JSON.stringify({ engine: el.engine.value, language: el.language.value, url: el.remoteUrl.value.trim(), key: el.remoteKey.value })); } catch {} }
+  function savePrefs() { try { localStorage.setItem(PREFS_KEY, JSON.stringify({ engine: el.engine.value, url: el.remoteUrl.value.trim(), key: el.remoteKey.value })); } catch {} }
   function loadPrefs() {
     try {
       const p = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
       if (p.engine && [...el.engine.options].some(o => o.value === p.engine)) el.engine.value = p.engine;
-      if (p.language !== undefined && [...el.language.options].some(o => o.value === p.language)) el.language.value = p.language;
       el.remoteUrl.value = p.url || ''; el.remoteKey.value = p.key || '';
     } catch {}
   }
@@ -234,8 +228,7 @@
           });
           self.postMessage({ type: 'ready' });
         } else if (data.type === 'run') {
-          const opts = { chunk_length_s: 30, stride_length_s: 5, task: 'transcribe' };
-          if (data.language) opts.language = data.language;
+          const opts = { chunk_length_s: 30, stride_length_s: 5 };
           const out = await asr(data.audio, opts);
           self.postMessage({ type: 'result', text: (out.text || '').trim() });
         }
@@ -294,13 +287,12 @@
     for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000));
     return btoa(s);
   }
-  async function remoteTranscribe(pcm, language) {
+  async function remoteTranscribe(pcm) {
     let base = el.remoteUrl.value.trim().replace(/\/+$/, '').replace(/\/v1$/, '');
     if (!/^https?:\/\//i.test(base)) base = 'http://' + base;
-    const lang = language ? language[0].toUpperCase() + language.slice(1) : '';
     // Prefilling the assistant turn pins the language, as in the llama.cpp Qwen3-ASR examples.
     const messages = [{ role: 'user', content: [{ type: 'input_audio', input_audio: { data: wavBase64(pcm), format: 'wav' } }] }];
-    if (lang) messages.push({ role: 'assistant', content: [{ type: 'text', text: `language ${lang}<asr_text>` }] });
+    messages.push({ role: 'assistant', content: [{ type: 'text', text: 'language English<asr_text>' }] });
     const headers = { 'Content-Type': 'application/json' };
     if (el.remoteKey.value) headers.Authorization = 'Bearer ' + el.remoteKey.value;
     log('REMOTE', `${base}/v1/chat/completions (${(pcm.length / SR).toFixed(1)}s)`);
@@ -383,12 +375,12 @@
     try {
       let pcm = trim(await toPcm16k(blob));
       if (pcm.length < SR * 0.3) throw new Error('No speech detected. Try again closer to the mic.');
-      const secs = pcm.length / SR, lang = el.language.value;
+      const secs = pcm.length / SR;
       let text;
-      if (isRemote()) text = await remoteTranscribe(pcm, lang);
+      if (isRemote()) text = await remoteTranscribe(pcm);
       else {
         if (!ready || loadedKey !== el.engine.value) throw new Error('Model is not loaded yet.');
-        text = (await call({ type: 'run', audio: pcm, language: lang })).text;
+        text = (await call({ type: 'run', audio: pcm })).text;
       }
       text = (text || '').trim();
       if (!text) throw new Error('No speech detected. Try again closer to the mic.');
@@ -412,7 +404,6 @@
     else chip('Not set up');
     render();
   });
-  el.language.addEventListener('change', savePrefs);
   el.remoteUrl.addEventListener('input', () => { savePrefs(); if (isRemote()) chip(el.remoteUrl.value.trim() ? 'My PC' : 'Not set up', el.remoteUrl.value.trim() ? 'ready' : ''); render(); });
   el.remoteKey.addEventListener('change', savePrefs);
   el.recordBtn.addEventListener('click', () => {
