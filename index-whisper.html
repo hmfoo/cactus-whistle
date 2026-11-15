@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f5f7f4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#101512" media="(prefers-color-scheme: dark)">
+<meta name="description" content="Private voice transcription: on-device Whisper, or your own PC running Qwen3-ASR.">
+<title>Whistle</title>
+<style>
+  :root{color-scheme:light dark;--bg:#f5f7f4;--card:#fff;--line:#e2e8e2;--text:#18211b;--muted:#6a766d;--accent:#2e7d4b;--accent-ink:#fff;--rec:#d6453a;--soft:#eaf1eb;--danger:#c0392b;--shadow:0 1px 2px rgba(20,40,25,.06),0 6px 20px rgba(20,40,25,.06)}
+  @media(prefers-color-scheme:dark){:root{--bg:#101512;--card:#171e19;--line:#27322a;--text:#e8f0ea;--muted:#8d9c91;--accent:#7bd08f;--accent-ink:#0d1a11;--rec:#ee6a5f;--soft:#1e2a21;--danger:#ff8f84;--shadow:none}}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  [hidden]{display:none!important}
+  body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;min-height:100dvh;padding:calc(14px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom))}
+  .app{max-width:520px;margin:0 auto}
+  header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:18px}
+  .brand{display:flex;align-items:center;gap:8px}
+  h1{margin:0;font-size:19px;font-weight:700;letter-spacing:-.3px}
+  .chip{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);background:var(--card);border:1px solid var(--line);border-radius:99px;padding:5px 11px}
+  .dot{width:7px;height:7px;border-radius:50%;background:#d3a443;flex:none}
+  .dot.ready{background:var(--accent)} .dot.fail{background:var(--danger)}
+  button,select,input,textarea{font:inherit;color:inherit}
+  button{border:0;cursor:pointer;touch-action:manipulation}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .recorder{display:flex;flex-direction:column;align-items:center;gap:10px;margin-bottom:16px}
+  .rec{width:100%;min-height:64px;border-radius:20px;background:var(--accent);color:var(--accent-ink);font-size:17px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:var(--shadow);transition:transform .08s}
+  .rec:active:not(:disabled){transform:scale(.985)}
+  .rec.recording{background:var(--rec);color:#fff}
+  .rec svg{width:22px;height:22px;flex:none}
+  .rec .ic-stop{display:none} .rec.recording .ic-mic{display:none} .rec.recording .ic-stop{display:block}
+  .meter{width:100%;height:3px;background:var(--line);border-radius:99px;overflow:hidden;display:none}
+  .meter>span{display:block;height:100%;width:0;background:var(--accent);transition:width .15s}
+  .timer{font-variant-numeric:tabular-nums;font-size:14px;color:var(--rec);font-weight:600}
+  .timer:empty,.status:empty{display:none}
+  .status{font-size:13px;color:var(--muted);text-align:center}
+  .status.error{color:var(--danger)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:12px;box-shadow:var(--shadow)}
+  .opts{display:flex;gap:8px;margin-bottom:10px}
+  select,input{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:0 11px;height:42px;min-width:0;outline:none;font-size:14px}
+  select{flex:1} input{width:100%}
+  select:focus,input:focus{border-color:var(--accent)}
+  textarea{width:100%;min-height:120px;resize:vertical;background:transparent;border:0;outline:none;padding:4px 2px;font-size:16px;line-height:1.5}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid var(--line);padding-top:10px;margin-top:6px}
+  .meta{font-size:12px;color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .btn{border-radius:11px;padding:0 16px;height:38px;font-size:14px;font-weight:650;background:var(--accent);color:var(--accent-ink)}
+  .btn.soft{background:var(--soft);color:var(--text)}
+  .link{background:none;color:var(--muted);font-size:12px;padding:8px 6px}
+  .link.danger{color:var(--danger)}
+  .remote{margin-bottom:10px;display:grid;gap:8px}
+  .hint{font-size:12px;color:var(--muted)}
+  .history{margin-top:22px}
+  .history-head{display:flex;align-items:center;justify-content:space-between;margin:0 4px 6px;font-size:13px;color:var(--muted);font-weight:600}
+  .history-list{display:flex;flex-direction:column;gap:8px}
+  .item{display:flex;align-items:flex-start;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 10px 10px 13px}
+  .item-main{flex:1;min-width:0;cursor:pointer}
+  .item-date{font-size:11px;color:var(--muted);margin-bottom:2px}
+  .item-text{font-size:14px;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .item .btn{height:32px;padding:0 12px;font-size:12px;flex:none}
+  footer{margin-top:26px;text-align:center}
+  .diag{margin-top:6px;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px}
+  .diag-actions{display:flex;gap:6px;margin-bottom:8px}
+  .diag-actions .btn{height:32px;font-size:12px;padding:0 12px}
+  .debug-log{max-height:220px;overflow:auto;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px;font:11px/1.5 ui-monospace,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text}
+  .debug-log .error{color:var(--danger)} .debug-log .ok{color:var(--accent)}
+  .toast{position:fixed;left:50%;bottom:calc(22px + env(safe-area-inset-bottom));transform:translate(-50%,16px);opacity:0;pointer-events:none;background:var(--text);color:var(--bg);border-radius:12px;padding:9px 14px;font-size:13px;font-weight:600;transition:.2s;z-index:20;max-width:calc(100vw - 32px);text-align:center}
+  .toast.show{transform:translate(-50%,0);opacity:1}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand"><h1>🎙️ Whistle</h1></div>
+    <div class="chip"><span class="dot" id="dot"></span><span id="chip">Not set up</span></div>
+  </header>
+
+  <main>
+    <section class="recorder">
+      <button class="rec" id="recordBtn" disabled>
+        <svg class="ic-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+        <svg class="ic-stop" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2.5"/></svg>
+        <span id="recordLabel">Checking…</span>
+      </button>
+      <div class="meter" id="meter"><span id="meterBar"></span></div>
+      <div class="timer" id="timer"></div>
+      <div class="status" id="status" role="status" aria-live="polite"></div>
+    </section>
+
+    <section class="card">
+      <div class="opts">
+        <select id="engine" aria-label="Engine">
+          <option value="whisper-small">Phone · Whisper Small (~130 MB)</option>
+          <option value="whisper-turbo">Phone · Whisper Turbo (~800 MB, best)</option>
+          <option value="whisper-base">Phone · Whisper Base (~40 MB, fastest)</option>
+          <option value="remote">My PC · Qwen3-ASR (best accents)</option>
+        </select>
+        <select id="language" aria-label="Language" style="flex:0 0 34%">
+          <option value="english">English</option><option value="">Auto</option><option value="german">German</option><option value="french">French</option><option value="spanish">Spanish</option><option value="italian">Italian</option><option value="dutch">Dutch</option><option value="polish">Polish</option><option value="portuguese">Portuguese</option><option value="hindi">Hindi</option>
+        </select>
+      </div>
+      <div class="remote" id="remoteBox" hidden>
+        <input id="remoteUrl" type="url" inputmode="url" placeholder="https://my-pc.tailnet.ts.net or http://192.168.1.20:8080" autocomplete="off" aria-label="Server address">
+        <input id="remoteKey" type="password" placeholder="API key (optional)" autocomplete="off" aria-label="API key">
+        <span class="hint">Runs llama-server with the Qwen3-ASR GGUF + mmproj on your PC. Audio goes only to that address.</span>
+      </div>
+      <textarea id="transcript" placeholder="Transcript" spellcheck="true"></textarea>
+      <div class="row"><span class="meta" id="meta"></span><button class="btn" id="copyBtn" disabled>Copy</button></div>
+    </section>
+
+    <section class="history" id="historySection" hidden>
+      <div class="history-head"><span>History <span id="historyCount"></span></span><button class="link danger" id="clearHistoryBtn">Clear</button></div>
+      <div class="history-list" id="historyList"></div>
+    </section>
+  </main>
+
+  <footer>
+    <button class="link" id="diagToggle" aria-expanded="false" aria-controls="debugPanel">Diagnostics</button>
+    <div class="diag" id="debugPanel" hidden>
+      <div class="diag-actions"><button class="btn soft" id="copyDebugBtn">Copy log</button><button class="btn soft" id="clearDebugBtn">Clear</button></div>
+      <div class="debug-log" id="debugLog">No events yet.</div>
+    </div>
+  </footer>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  'use strict';
+  const TJS = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.2';
+  const MODELS = {
+    'whisper-small': { id: 'onnx-community/whisper-small', label: 'Whisper Small' },
+    'whisper-turbo': { id: 'onnx-community/whisper-large-v3-turbo', label: 'Whisper Turbo' },
+    'whisper-base':  { id: 'onnx-community/whisper-base', label: 'Whisper Base' }
+  };
+  const HISTORY_KEY = 'whistle-history-v2', PREFS_KEY = 'whistle-prefs-v2';
+  const SR = 16000, MAX_SECONDS = 120;
+
+  const $ = id => document.getElementById(id);
+  const el = Object.fromEntries(['dot','chip','recordBtn','recordLabel','meter','meterBar','timer','status','engine','language','remoteBox','remoteUrl','remoteKey','transcript','meta','copyBtn','historySection','historyList','historyCount','clearHistoryBtn','toast','diagToggle','debugPanel','debugLog','copyDebugBtn','clearDebugBtn'].map(i => [i, $(i)]));
+
+  let worker = null, loadedKey = '', ready = false, loading = false, busy = false;
+  let recorder = null, mic = null, parts = [], t0 = 0, tick = null, toastT = null;
+  let history = (() => { try { const v = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; } })();
+  const logs = [];
+
+  // ---------- diagnostics ----------
+  const fmt = v => v instanceof Error ? `${v.name}: ${v.message}` : typeof v === 'string' ? v : (() => { try { return JSON.stringify(v); } catch { return String(v); } })();
+  function log(label, detail = '', level = 'info') {
+    logs.push({ line: `[${new Date().toLocaleTimeString()}] ${label} ${fmt(detail)}`, level });
+    if (logs.length > 120) logs.shift();
+    if (!el.debugPanel.hidden) renderLog();
+  }
+  function renderLog() {
+    el.debugLog.replaceChildren(...logs.map(l => Object.assign(document.createElement('div'), { className: l.level, textContent: l.line })));
+    el.debugLog.scrollTop = el.debugLog.scrollHeight;
+  }
+
+  // ---------- UI ----------
+  const status = (m, err = false) => { el.status.textContent = m; el.status.classList.toggle('error', err); if (err) log('ERROR', m, 'error'); };
+  const toast = m => { el.toast.textContent = m; el.toast.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => el.toast.classList.remove('show'), 1800); };
+  const chip = (t, s = '') => { el.chip.textContent = t; el.dot.className = 'dot' + (s ? ' ' + s : ''); };
+  const isRemote = () => el.engine.value === 'remote';
+  const engineKey = () => isRemote() ? 'remote' : el.engine.value;
+  function render() {
+    const rec = !!(recorder && recorder.state === 'recording');
+    let label, disabled = false;
+    if (rec) label = 'Stop';
+    else if (loading) { label = 'Setting up…'; disabled = true; }
+    else if (busy) { label = 'Transcribing…'; disabled = true; }
+    else if (isRemote()) label = el.remoteUrl.value.trim() ? 'Tap to record' : 'Enter server address';
+    else if (!ready || loadedKey !== engineKey()) label = 'Set up · download model';
+    else label = 'Tap to record';
+    if (isRemote() && !el.remoteUrl.value.trim() && !rec) disabled = true;
+    el.recordBtn.classList.toggle('recording', rec);
+    $('recordLabel').textContent = label;
+    el.recordBtn.disabled = disabled;
+    for (const k of ['engine', 'language', 'remoteUrl', 'remoteKey']) el[k].disabled = loading || busy || rec;
+    el.remoteBox.hidden = !isRemote();
+  }
+  const dur = s => { s = Math.max(0, Math.floor(s)); return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; };
+  function savePrefs() { try { localStorage.setItem(PREFS_KEY, JSON.stringify({ engine: el.engine.value, language: el.language.value, url: el.remoteUrl.value.trim(), key: el.remoteKey.value })); } catch {} }
+  function loadPrefs() {
+    try {
+      const p = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
+      if (p.engine && [...el.engine.options].some(o => o.value === p.engine)) el.engine.value = p.engine;
+      if (p.language !== undefined && [...el.language.options].some(o => o.value === p.language)) el.language.value = p.language;
+      el.remoteUrl.value = p.url || ''; el.remoteKey.value = p.key || '';
+    } catch {}
+  }
+
+  // ---------- history ----------
+  const stamp = iso => new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  function renderHistory() {
+    el.historySection.hidden = !history.length;
+    el.historyCount.textContent = history.length ? `(${history.length})` : '';
+    el.historyList.replaceChildren(...history.map(item => {
+      const card = document.createElement('article'); card.className = 'item';
+      const main = document.createElement('div'); main.className = 'item-main';
+      const d = document.createElement('div'); d.className = 'item-date'; d.textContent = stamp(item.createdAt) + (item.engine ? ' · ' + item.engine : '');
+      const t = document.createElement('div'); t.className = 'item-text'; t.textContent = item.text;
+      main.append(d, t);
+      main.addEventListener('click', () => { el.transcript.value = item.text; el.copyBtn.disabled = !item.text; el.meta.textContent = stamp(item.createdAt); el.transcript.scrollIntoView({ behavior: 'smooth', block: 'center' }); });
+      const c = document.createElement('button'); c.className = 'btn soft'; c.textContent = 'Copy'; c.addEventListener('click', () => copyText(item.text));
+      card.append(main, c); return card;
+    }));
+  }
+  function saveHistory() { try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, 50))); } catch { toast('Storage full: copy the text to keep it'); } }
+  async function copyText(v) {
+    if (!v) return;
+    try {
+      if (navigator.clipboard && isSecureContext) await navigator.clipboard.writeText(v);
+      else { el.transcript.value = v; el.transcript.select(); if (!document.execCommand('copy')) throw 0; }
+      toast('Copied');
+    } catch { toast('Copy blocked: select the text and copy it'); }
+  }
+
+  // ---------- on-device engine (Web Worker + transformers.js) ----------
+  const WORKER_SRC = `
+    import { pipeline, env } from '${TJS}';
+    env.allowLocalModels = false;
+    let asr = null;
+    self.onmessage = async ({ data }) => {
+      try {
+        if (data.type === 'load') {
+          const files = {};
+          asr = await pipeline('automatic-speech-recognition', data.model, {
+            device: 'wasm', dtype: 'q4',
+            progress_callback: p => {
+              if (p.status === 'progress' && p.file) { files[p.file] = { loaded: p.loaded, total: p.total };
+                let l = 0, t = 0; for (const f of Object.values(files)) { l += f.loaded; t += f.total; }
+                self.postMessage({ type: 'progress', loaded: l, total: t });
+              }
+            }
+          });
+          self.postMessage({ type: 'ready' });
+        } else if (data.type === 'run') {
+          const opts = { chunk_length_s: 30, stride_length_s: 5, task: 'transcribe' };
+          if (data.language) opts.language = data.language;
+          const out = await asr(data.audio, opts);
+          self.postMessage({ type: 'result', text: (out.text || '').trim() });
+        }
+      } catch (e) { self.postMessage({ type: 'error', message: (e && e.message) || String(e) }); }
+    };`;
+  function startWorker() {
+    if (worker) worker.terminate();
+    const url = URL.createObjectURL(new Blob([WORKER_SRC], { type: 'text/javascript' }));
+    worker = new Worker(url, { type: 'module' });
+    worker.addEventListener('error', e => log('WORKER_ERROR', e.message || 'worker failed to start', 'error'));
+    return worker;
+  }
+  function call(msg, onProgress) {
+    return new Promise((resolve, reject) => {
+      const h = ({ data }) => {
+        if (data.type === 'progress') return onProgress && onProgress(data);
+        worker.removeEventListener('message', h);
+        data.type === 'error' ? reject(new Error(data.message)) : resolve(data);
+      };
+      worker.addEventListener('message', h);
+      worker.postMessage(msg, msg.audio ? [msg.audio.buffer] : []);
+    });
+  }
+  async function setup() {
+    if (loading || isRemote()) return;
+    loading = true; ready = false; render(); chip('Loading');
+    el.meter.style.display = 'block'; el.meterBar.style.width = '3%';
+    const m = MODELS[el.engine.value];
+    try {
+      log('LOAD', m.id);
+      startWorker();
+      await call({ type: 'load', model: m.id }, p => {
+        const pct = p.total ? Math.min(99, Math.round(p.loaded / p.total * 100)) : 0;
+        el.meterBar.style.width = pct + '%';
+        status(`Downloading ${m.label}… ${(p.loaded / 1048576).toFixed(0)} / ${(p.total / 1048576).toFixed(0)} MB`);
+      });
+      loadedKey = el.engine.value; ready = true;
+      try { localStorage.setItem(PREFS_KEY + ':loaded:' + loadedKey, '1'); } catch {}
+      chip(`${m.label} · on-device`, 'ready'); status(''); toast('Ready'); log('READY', m.id, 'ok');
+    } catch (e) {
+      ready = false; chip('Setup failed', 'fail');
+      status(`Setup failed: ${e.message}`, true);
+    } finally { loading = false; el.meter.style.display = 'none'; render(); }
+  }
+
+  // ---------- remote engine (llama-server + Qwen3-ASR) ----------
+  function wavBase64(pcm) {
+    const buf = new ArrayBuffer(44 + pcm.length * 2), v = new DataView(buf);
+    const w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+    w(0, 'RIFF'); v.setUint32(4, 36 + pcm.length * 2, true); w(8, 'WAVEfmt ');
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, SR, true); v.setUint32(28, SR * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    w(36, 'data'); v.setUint32(40, pcm.length * 2, true);
+    for (let i = 0; i < pcm.length; i++) v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, pcm[i])) * 0x7fff, true);
+    const b = new Uint8Array(buf); let s = '';
+    for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000));
+    return btoa(s);
+  }
+  async function remoteTranscribe(pcm, language) {
+    let base = el.remoteUrl.value.trim().replace(/\/+$/, '').replace(/\/v1$/, '');
+    if (!/^https?:\/\//i.test(base)) base = 'http://' + base;
+    const lang = language ? language[0].toUpperCase() + language.slice(1) : '';
+    // Prefilling the assistant turn pins the language, as in the llama.cpp Qwen3-ASR examples.
+    const messages = [{ role: 'user', content: [{ type: 'input_audio', input_audio: { data: wavBase64(pcm), format: 'wav' } }] }];
+    if (lang) messages.push({ role: 'assistant', content: [{ type: 'text', text: `language ${lang}<asr_text>` }] });
+    const headers = { 'Content-Type': 'application/json' };
+    if (el.remoteKey.value) headers.Authorization = 'Bearer ' + el.remoteKey.value;
+    log('REMOTE', `${base}/v1/chat/completions (${(pcm.length / SR).toFixed(1)}s)`);
+    const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 90000);
+    let res;
+    try { res = await fetch(base + '/v1/chat/completions', { method: 'POST', headers, signal: ctl.signal, body: JSON.stringify({ model: 'qwen3-asr', messages, temperature: 0, max_tokens: 2048, stream: false }) }); }
+    catch (e) { throw new Error(e.name === 'AbortError' ? 'Server timed out.' : 'Cannot reach the server. Check the address, that llama-server is running, and (for http) that you allowed local network access.'); }
+    finally { clearTimeout(to); }
+    if (!res.ok) throw new Error(`Server returned ${res.status}: ${(await res.text()).slice(0, 160)}`);
+    const j = await res.json();
+    let text = j.choices?.[0]?.message?.content || '';
+    if (Array.isArray(text)) text = text.map(p => p.text || '').join('');
+    return text.replace(/^[\s\S]*?<asr_text>/, '').replace(/^language\s+\w+\s*/i, '').trim();
+  }
+
+  // ---------- recording & audio ----------
+  async function startRecording() {
+    if (busy || loading || recorder) return;
+    if (!isSecureContext || !navigator.mediaDevices?.getUserMedia) return status('Microphone needs HTTPS.', true);
+    if (!window.MediaRecorder) return status('This browser does not support recording.', true);
+    try {
+      mic = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+      parts = [];
+      const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find(t => MediaRecorder.isTypeSupported?.(t)) || '';
+      recorder = mime ? new MediaRecorder(mic, { mimeType: mime }) : new MediaRecorder(mic);
+      recorder.ondataavailable = e => { if (e.data?.size) parts.push(e.data); };
+      recorder.onerror = e => { status('Recording error: ' + (e.error?.message || 'unknown'), true); cleanup(); busy = false; render(); };
+      recorder.onstop = async () => {
+        const blob = new Blob(parts, { type: recorder?.mimeType || 'audio/webm' });
+        cleanup();
+        if (!blob.size) { busy = false; render(); return status('No audio captured. Check microphone permission.', true); }
+        await transcribe(blob);
+      };
+      t0 = Date.now(); recorder.start(250); status('');
+      el.timer.textContent = '00:00';
+      tick = setInterval(() => {
+        const s = (Date.now() - t0) / 1000;
+        el.timer.textContent = `${dur(s)} / ${dur(MAX_SECONDS)}`;
+        if (s >= MAX_SECONDS) stopRecording();
+      }, 250);
+      render();
+    } catch (e) {
+      cleanup(); busy = false; render();
+      status(e?.name === 'NotAllowedError' ? 'Microphone permission denied. Allow it in site settings.' : (e.message || 'Could not start the microphone.'), true);
+    }
+  }
+  function cleanup() {
+    clearInterval(tick); tick = null;
+    mic?.getTracks().forEach(t => t.stop()); mic = null; recorder = null;
+    el.timer.textContent = ''; render();
+  }
+  function stopRecording() { if (recorder?.state === 'recording') { busy = true; recorder.stop(); render(); } }
+
+  async function toPcm16k(blob) {
+    const Ctx = window.AudioContext || window.webkitAudioContext, Off = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!Ctx || !Off) throw new Error('Web Audio is not available in this browser.');
+    const ctx = new Ctx();
+    try {
+      const dec = await ctx.decodeAudioData(await blob.arrayBuffer());
+      const off = new Off(1, Math.max(1, Math.ceil(dec.duration * SR)), SR);
+      const src = off.createBufferSource(); src.buffer = dec; src.connect(off.destination); src.start(0);
+      return (await off.startRendering()).getChannelData(0).slice();
+    } finally { try { await ctx.close(); } catch {} }
+  }
+  // Drops leading/trailing silence (keeps 350 ms padding) so Whisper has less room to hallucinate.
+  function trim(pcm) {
+    const f = SR * 0.02 | 0, n = Math.floor(pcm.length / f);
+    if (n < 10) return pcm;
+    const rms = new Float32Array(n); let peak = 0;
+    for (let i = 0; i < n; i++) { let s = 0; for (let j = 0; j < f; j++) { const v = pcm[i * f + j]; s += v * v; } rms[i] = Math.sqrt(s / f); if (rms[i] > peak) peak = rms[i]; }
+    const th = Math.max(0.01, peak * 0.08); let a = -1, b = -1;
+    for (let i = 0; i < n; i++) if (rms[i] >= th) { if (a < 0) a = i; b = i; }
+    if (a < 0) return pcm;
+    const pad = SR * 0.35 | 0, s = Math.max(0, a * f - pad), e = Math.min(pcm.length, (b + 1) * f + pad);
+    return (pcm.length - (e - s)) / SR >= 0.5 ? pcm.slice(s, e) : pcm;
+  }
+  async function transcribe(blob) {
+    busy = true; render(); status('');
+    const t = performance.now();
+    try {
+      let pcm = trim(await toPcm16k(blob));
+      if (pcm.length < SR * 0.3) throw new Error('No speech detected. Try again closer to the mic.');
+      const secs = pcm.length / SR, lang = el.language.value;
+      let text;
+      if (isRemote()) text = await remoteTranscribe(pcm, lang);
+      else {
+        if (!ready || loadedKey !== el.engine.value) throw new Error('Model is not loaded yet.');
+        text = (await call({ type: 'run', audio: pcm, language: lang })).text;
+      }
+      text = (text || '').trim();
+      if (!text) throw new Error('No speech detected. Try again closer to the mic.');
+      const took = ((performance.now() - t) / 1000).toFixed(1);
+      el.transcript.value = text; el.copyBtn.disabled = false;
+      el.meta.textContent = `${secs.toFixed(1)}s audio · ${took}s · ${isRemote() ? 'my PC' : MODELS[el.engine.value].label}`;
+      history.unshift({ id: Date.now(), createdAt: new Date().toISOString(), text, engine: isRemote() ? 'PC' : MODELS[el.engine.value].label.replace('Whisper ', '') });
+      history = history.slice(0, 50); saveHistory(); renderHistory();
+      log('DONE', { secs: +secs.toFixed(1), took, chars: text.length }, 'ok');
+    } catch (e) { status(e.message || String(e), true); }
+    finally { busy = false; render(); }
+  }
+
+  // ---------- wiring ----------
+  window.addEventListener('error', e => log('WINDOW_ERROR', e.message, 'error'));
+  window.addEventListener('unhandledrejection', e => log('UNHANDLED', e.reason, 'error'));
+  el.engine.addEventListener('change', () => {
+    savePrefs(); status('');
+    if (isRemote()) chip(el.remoteUrl.value.trim() ? 'My PC' : 'Not set up', el.remoteUrl.value.trim() ? 'ready' : '');
+    else if (ready && loadedKey === el.engine.value) chip(`${MODELS[loadedKey].label} · on-device`, 'ready');
+    else chip('Not set up');
+    render();
+  });
+  el.language.addEventListener('change', savePrefs);
+  el.remoteUrl.addEventListener('input', () => { savePrefs(); if (isRemote()) chip(el.remoteUrl.value.trim() ? 'My PC' : 'Not set up', el.remoteUrl.value.trim() ? 'ready' : ''); render(); });
+  el.remoteKey.addEventListener('change', savePrefs);
+  el.recordBtn.addEventListener('click', () => {
+    if (recorder?.state === 'recording') stopRecording();
+    else if (loading || busy) return;
+    else if (!isRemote() && (!ready || loadedKey !== el.engine.value)) setup();
+    else startRecording();
+  });
+  el.copyBtn.addEventListener('click', () => copyText(el.transcript.value));
+  el.transcript.addEventListener('input', () => { el.copyBtn.disabled = !el.transcript.value.trim(); });
+  el.clearHistoryBtn.addEventListener('click', () => {
+    if (!history.length || !confirm('Delete all saved transcripts from this browser?')) return;
+    history = []; saveHistory(); renderHistory(); toast('History cleared');
+  });
+  el.diagToggle.addEventListener('click', () => {
+    const open = el.debugPanel.hidden; el.debugPanel.hidden = !open;
+    el.diagToggle.setAttribute('aria-expanded', String(open)); el.diagToggle.textContent = open ? 'Hide diagnostics' : 'Diagnostics';
+    if (open) renderLog();
+  });
+  el.copyDebugBtn.addEventListener('click', async () => { try { await navigator.clipboard.writeText(logs.map(l => l.line).join('\n')); toast('Log copied'); } catch { toast('Could not copy log'); } });
+  el.clearDebugBtn.addEventListener('click', () => { logs.length = 0; el.debugLog.textContent = 'Log cleared.'; });
+
+  loadPrefs();
+  log('PAGE', { secure: isSecureContext, ua: navigator.userAgent, mem: navigator.deviceMemory || 'n/a' }, 'ok');
+  renderHistory();
+  if (!isSecureContext) status('Open this page over HTTPS to use the microphone.', true);
+  if (isRemote() && el.remoteUrl.value.trim()) chip('My PC', 'ready');
+  render();
+  // Returning visitors: model files are in the browser cache, so loading is quick and automatic.
+  if (!isRemote() && localStorage.getItem(PREFS_KEY + ':loaded:' + el.engine.value)) setup();
+})();
+</script>
+</body>
+</html>
