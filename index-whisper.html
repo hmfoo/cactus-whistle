@@ -89,9 +89,9 @@
     <section class="card">
       <div class="opts">
         <select id="engine" aria-label="Engine">
+          <option value="whisper-base">Phone · Whisper Base (~40 MB, fastest)</option>
           <option value="whisper-small">Phone · Whisper Small (~130 MB)</option>
           <option value="whisper-turbo">Phone · Whisper Turbo (~800 MB, best)</option>
-          <option value="whisper-base">Phone · Whisper Base (~40 MB, fastest)</option>
           <option value="remote">My PC · Qwen3-ASR (best accents)</option>
         </select>
         <select id="language" aria-label="Language" style="flex:0 0 34%">
@@ -128,9 +128,9 @@
   'use strict';
   const TJS = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.2';
   const MODELS = {
-    'whisper-small': { id: 'onnx-community/whisper-small', label: 'Whisper Small' },
+    'whisper-small': { id: 'onnx-community/whisper-small.en', label: 'Whisper Small' },
     'whisper-turbo': { id: 'onnx-community/whisper-large-v3-turbo', label: 'Whisper Turbo' },
-    'whisper-base':  { id: 'onnx-community/whisper-base', label: 'Whisper Base' }
+    'whisper-base':  { id: 'onnx-community/whisper-base.en', label: 'Whisper Base' }
   };
   const HISTORY_KEY = 'whistle-history-v2', PREFS_KEY = 'whistle-prefs-v2';
   const SR = 16000, MAX_SECONDS = 120;
